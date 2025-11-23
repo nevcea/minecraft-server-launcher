@@ -38,7 +38,7 @@ jobs:
         run: |
           $version = (Select-String -Path "Cargo.toml" -Pattern '^version = "([^"]+)"' | ForEach-Object { $_.Matches.Groups[1].Value })
           echo "version=$version" >> $env:GITHUB_OUTPUT
-          echo "Version: $version"
+          echo "Version from Cargo.toml: $version"
       
       - name: Normalize tag name (remove v prefix if present)
         id: tag
@@ -49,6 +49,16 @@ jobs:
           }
           echo "tag=$tagName" >> $env:GITHUB_OUTPUT
           echo "Tag name: $tagName"
+      
+      - name: Verify version matches tag
+        run: |
+          $cargoVersion = "${{ steps.version.outputs.version }}"
+          $tagVersion = "${{ steps.tag.outputs.tag }}"
+          if ($cargoVersion -ne $tagVersion) {
+            Write-Error "Version mismatch: Cargo.toml version ($cargoVersion) does not match tag ($tagVersion)"
+            exit 1
+          }
+          echo "Version verification passed: $cargoVersion"
       
       - name: Build release binary
         run: cargo build --release
