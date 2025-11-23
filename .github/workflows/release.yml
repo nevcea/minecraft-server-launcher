@@ -3,77 +3,58 @@ name: Release
 on:
   push:
     tags:
-      - '*.*.*'
+      - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
-  build-and-release:
-    runs-on: windows-latest
-    permissions:
-      contents: write
-    
+  build:
+    name: Build and Release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            name: paper-launcher-linux-amd64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            name: paper-launcher-linux-arm64
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            name: paper-launcher-darwin-amd64
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            name: paper-launcher-darwin-arm64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            name: paper-launcher-windows-amd64.exe
+
     steps:
-      - name: Checkout repository code
-        uses: actions/checkout@v4
-      
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          toolchain: stable
-      
-      - name: Cache Cargo dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-      
-      - name: Extract version from Cargo.toml
-        id: version
+          go-version: '1.21'
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
         run: |
-          $version = (Select-String -Path "Cargo.toml" -Pattern '^version = "([^"]+)"' | ForEach-Object { $_.Matches.Groups[1].Value })
-          echo "version=$version" >> $env:GITHUB_OUTPUT
-          echo "Version from Cargo.toml: $version"
-      
-      - name: Normalize tag name (remove v prefix if present)
-        id: tag
-        run: |
-          $tagName = "${{ github.ref_name }}"
-          if ($tagName -match '^v(.+)$') {
-            $tagName = $matches[1]
-          }
-          echo "tag=$tagName" >> $env:GITHUB_OUTPUT
-          echo "Tag name: $tagName"
-      
-      - name: Verify version matches tag
-        run: |
-          $cargoVersion = "${{ steps.version.outputs.version }}"
-          $tagVersion = "${{ steps.tag.outputs.tag }}"
-          if ($cargoVersion -ne $tagVersion) {
-            Write-Error "Version mismatch: Cargo.toml version ($cargoVersion) does not match tag ($tagVersion)"
-            exit 1
-          }
-          echo "Version verification passed: $cargoVersion"
-      
-      - name: Build release binary
-        run: cargo build --release
-      
-      - name: Create GitHub Release and upload assets
+          go build -v -ldflags="-s -w" -o ${{ matrix.name }} .
+
+      - name: Upload Release Asset
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          name: ${{ steps.tag.outputs.tag }}
-          body: |
-            ${{ steps.tag.outputs.tag }}
-          files: |  
-            target/release/paper-launcher.exe
-          draft: false
-          prerelease: false
+          files: ${{ matrix.name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

@@ -1,6 +1,6 @@
 # Minecraft Server Launcher
 
-A fast and reliable Minecraft Paper server launcher written in Rust. This launcher automatically downloads Paper server JAR files, manages server configuration, and handles EULA acceptance.
+A fast and reliable Minecraft Paper server launcher written in Go. This launcher automatically downloads Paper server JAR files, manages server configuration, and handles EULA acceptance.
 
 ## Features
 
@@ -8,8 +8,8 @@ A fast and reliable Minecraft Paper server launcher written in Rust. This launch
 - 💾 **Smart RAM Management**: Automatically calculates optimal RAM allocation based on system resources
 - ☕ **Java Version Detection**: Verifies Java installation and version compatibility
 - 📝 **EULA Handling**: Automatically accepts the Minecraft EULA
-- 🔒 **File Integrity Verification**: SHA-256 checksum validation with caching for downloaded JAR files
-- 🔐 **HTTPS Enforcement**: All downloads are performed over secure HTTPS connections
+- 🔒 **File Integrity Verification**: SHA-256 checksum validation for downloaded JAR files
+- ⚡ **Lightning Fast**: Compiles in 2-3 seconds with Go
 
 ## Requirements
 
@@ -21,12 +21,15 @@ A fast and reliable Minecraft Paper server launcher written in Rust. This launch
 ### Download from GitHub Releases (Recommended)
 
 1. Go to the [Releases](https://github.com/nevcea-sub/minecraft-server-launcher/releases) page
-2. Download the latest `paper-launcher.exe` file
+2. Download the appropriate binary for your OS:
+   - Windows: `paper-launcher-windows-amd64.exe`
+   - Linux: `paper-launcher-linux-amd64` or `paper-launcher-linux-arm64`
+   - macOS: `paper-launcher-darwin-amd64` or `paper-launcher-darwin-arm64`
 3. Run the executable
 
 ### Building from Source
 
-1. Install [Rust](https://www.rust-lang.org/tools/install) (1.70 or later)
+1. Install [Go](https://golang.org/dl/) (1.21 or later)
 
 2. Clone the repository:
 ```bash
@@ -36,10 +39,8 @@ cd minecraft-server-launcher
 
 3. Build the project:
 ```bash
-cargo build --release
+go build -o paper-launcher .
 ```
-
-4. The executable will be located at `target/release/paper-launcher.exe` (Windows) or `target/release/paper-launcher` (Linux/macOS)
 
 ## Usage
 
@@ -64,43 +65,53 @@ server_args = ["nogui"]       # Server arguments
 
 ### Command-Line Options
 
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--log-level` | `-l` | Log level: `trace`, `debug`, `info`, `warn`, `error` (default: `info`) |
-| `--verbose` | | Enable verbose logging |
-| `--quiet` | `-q` | Suppress all output except errors |
-| `--config` | `-c` | Custom config file path |
-| `--work-dir` | `-w` | Override working directory |
-| `--version` | `-v` | Override Minecraft version |
-| `--no-pause` | | Don't pause on exit |
+```
+  -log-level string
+        Log level (trace, debug, info, warn, error) (default "info")
+  -verbose
+        Enable verbose logging
+  -q    Suppress all output except errors
+  -c string
+        Custom config file path (default "config.toml")
+  -w string
+        Override working directory
+  -v string
+        Override Minecraft version
+  -no-pause
+        Don't pause on exit
+```
 
 ### Environment Variables
 
-Override configuration via environment variables: `MINECRAFT_VERSION`, `MIN_RAM`, `MAX_RAM`, `WORK_DIR`
+Override configuration via environment variables: `MINECRAFT_VERSION`, `WORK_DIR`
 
 ```bash
 export MINECRAFT_VERSION="1.21.1"
-export MIN_RAM=4
-export MAX_RAM=8
+export WORK_DIR="./server"
 ./paper-launcher
 ```
 
-## Security
-
-- 🔐 **HTTPS Enforcement**: All downloads over HTTPS only
-- 🔒 **SHA-256 Checksum Validation**: JAR files verified against SHA-256 checksums (cached in `.jar.sha256`)
-- ✅ **JAR Integrity Verification**: Validates ZIP structure, magic numbers, and manifest
-
 ## Performance
 
-| Operation | Time | Improvement |
-|-----------|------|-------------|
-| JAR validation + checksum (integrated) | ~190µs | **22% faster** |
-| JAR validation only | ~185µs | **12.8% faster** |
-| Checksum validation (cached) | ~1µs | Cached in `.jar.sha256` |
-| Checksum validation (calculated) | ~60µs | **20% faster** |
+- ⚡ **Build Time**: 2-3 seconds (vs 180+ seconds with previous implementation)
+- 🚀 **Startup Time**: Near-instant
+- 💾 **Binary Size**: ~10MB
+- 🎯 **Memory Usage**: Minimal overhead
 
-**Key Optimizations:**
-- Integrated validation reads file only once (22% faster)
-- Checksum caching reduces validation to ~1µs for subsequent runs
-- Size-based buffer selection optimizes small and large files
+## Why Go?
+
+This project was rewritten from Rust to Go for the following reasons:
+
+- **Faster compilation**: 2-3 seconds vs 3+ minutes
+- **Simpler dependencies**: No heavy async runtime or TLS libraries
+- **Easier maintenance**: Straightforward code without lifetime complexity
+- **Fast iteration**: Rapid development and testing cycle
+
+## License
+
+GPL-3.0 License - See [LICENSE.md](LICENSE.md) for details
+
+## Acknowledgments
+
+- Uses Aikar's flags for optimal Minecraft server performance
+- Built with the Paper API for server downloads

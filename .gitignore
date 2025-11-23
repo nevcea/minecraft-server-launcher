@@ -1,49 +1,39 @@
-# Rust
-/target/
-**/*.rs.bk
-*.pdb
-Cargo.lock
+# Binaries
+paper-launcher
+paper-launcher.exe
+paper-launcher-*
 
-# IDE
-.idea/
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.sum
+
+# IDEs
 .vscode/
+.idea/
 *.swp
 *.swo
 *~
-.DS_Store
 
-# Minecraft Server Files
+# Minecraft
 *.jar
-config.toml
+*.jar.sha256
 eula.txt
+config.toml
 server.properties
 logs/
 world/
 world_nether/
 world_the_end/
 plugins/
-crash-reports/
-usercache.json
-banned-ips.json
-banned-players.json
-ops.json
-whitelist.json
-bukkit.yml
-spigot.yml
-paper-global.yml
-paper-world-defaults.yml
+cache/
+versions/
 
-# OS
-Thumbs.db
-.DS_Store
-desktop.ini
-
-# Backup files
-*.bak
-*.backup
-*~
-
-# Temporary files
-*.tmp
-*.temp
-*.log
+# Old Rust project (keep for reference)
+/target/
+/Cargo.lock
