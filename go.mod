@@ -3,9 +3,9 @@ module github.com/nevcea-sub/minecraft-server-launcher
 go 1.21
 
 require (
-	github.com/BurntSushi/toml v1.4.0
 	github.com/schollz/progressbar/v3 v3.14.6
 	github.com/shirou/gopsutil/v3 v3.24.5
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (

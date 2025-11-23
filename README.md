@@ -49,18 +49,28 @@ Run the launcher:
 ./paper-launcher
 ```
 
-On first run, a `config.toml` file will be created with default settings. If no Paper JAR file is found, the launcher will automatically download it.
+On first run, a `config.yaml` file will be created with default settings. If no Paper JAR file is found, the launcher will automatically download it.
 
 ### Configuration
 
-Edit `config.toml` to customize your server settings:
+Edit `config.yaml` to customize your server settings:
 
-```toml
-minecraft_version = "latest"  # Use "latest" for the latest version
-min_ram = 2                   # Minimum RAM in GB
-max_ram = 4                   # Maximum RAM in GB (auto-adjusted based on system RAM)
-server_args = ["nogui"]       # Server arguments
-# work_dir = "./server"       # Optional: working directory
+```yaml
+minecraft_version: "latest"           # Use "latest" for the latest version
+auto_update: false                    # Automatically download new Paper builds
+auto_backup: true                     # Backup worlds before server start
+backup_count: 10                      # Number of backups to keep
+backup_worlds:                        # Worlds to backup
+  - world
+  - world_nether
+  - world_the_end
+min_ram: 2                            # Minimum RAM in GB
+max_ram: 4                            # Maximum RAM in GB (0 = auto)
+use_zgc: false                        # Use ZGC if available
+auto_ram_percentage: 85               # Used when max_ram == 0
+server_args:                          # Server arguments
+  - nogui
+# work_dir: "./server"                # Optional: working directory
 ```
 
 ### Command-Line Options
@@ -72,7 +82,7 @@ server_args = ["nogui"]       # Server arguments
         Enable verbose logging
   -q    Suppress all output except errors
   -c string
-        Custom config file path (default "config.toml")
+        Custom config file path (default "config.yaml")
   -w string
         Override working directory
   -v string

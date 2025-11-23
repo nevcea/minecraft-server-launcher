@@ -8,7 +8,7 @@ import (
 
 func TestLoad(t *testing.T) {
 	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
+	configPath := filepath.Join(tmpDir, "config.yaml")
 
 	cfg, err := Load(configPath)
 	if err != nil {
@@ -32,45 +32,77 @@ func TestValidate(t *testing.T) {
 		{
 			name: "valid config",
 			config: Config{
-				MinecraftVersion: "1.21.1",
-				MinRAM:           2,
-				MaxRAM:           4,
+				MinecraftVersion:  "1.21.1",
+				MinRAM:            2,
+				MaxRAM:            4,
+				AutoRAMPercentage: 85,
+				BackupCount:       10,
 			},
 			wantErr: false,
 		},
 		{
 			name: "empty version",
 			config: Config{
-				MinecraftVersion: "",
-				MinRAM:           2,
-				MaxRAM:           4,
+				MinecraftVersion:  "",
+				MinRAM:            2,
+				MaxRAM:            4,
+				AutoRAMPercentage: 85,
+				BackupCount:       10,
 			},
 			wantErr: true,
 		},
 		{
 			name: "min > max",
 			config: Config{
-				MinecraftVersion: "latest",
-				MinRAM:           8,
-				MaxRAM:           4,
+				MinecraftVersion:  "latest",
+				MinRAM:            8,
+				MaxRAM:            4,
+				AutoRAMPercentage: 85,
+				BackupCount:       10,
 			},
 			wantErr: true,
 		},
 		{
 			name: "zero min ram",
 			config: Config{
-				MinecraftVersion: "latest",
-				MinRAM:           0,
-				MaxRAM:           4,
+				MinecraftVersion:  "latest",
+				MinRAM:            0,
+				MaxRAM:            4,
+				AutoRAMPercentage: 85,
+				BackupCount:       10,
 			},
 			wantErr: true,
 		},
 		{
 			name: "max ram too high",
 			config: Config{
-				MinecraftVersion: "latest",
-				MinRAM:           2,
-				MaxRAM:           64,
+				MinecraftVersion:  "latest",
+				MinRAM:            2,
+				MaxRAM:            130,
+				AutoRAMPercentage: 85,
+				BackupCount:       10,
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid percentage low",
+			config: Config{
+				MinecraftVersion:  "latest",
+				MinRAM:            2,
+				MaxRAM:            4,
+				AutoRAMPercentage: 5,
+				BackupCount:       10,
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid percentage high",
+			config: Config{
+				MinecraftVersion:  "latest",
+				MinRAM:            2,
+				MaxRAM:            4,
+				AutoRAMPercentage: 100,
+				BackupCount:       10,
 			},
 			wantErr: true,
 		},
@@ -88,7 +120,7 @@ func TestValidate(t *testing.T) {
 
 func TestEnvOverride(t *testing.T) {
 	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.toml")
+	configPath := filepath.Join(tmpDir, "config.yaml")
 
 	os.Setenv("MINECRAFT_VERSION", "1.20.1")
 	defer os.Unsetenv("MINECRAFT_VERSION")
@@ -102,4 +134,3 @@ func TestEnvOverride(t *testing.T) {
 		t.Errorf("expected env override '1.20.1', got %s", cfg.MinecraftVersion)
 	}
 }
-

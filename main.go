@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/nevcea-sub/minecraft-server-launcher/internal/backup"
 	"github.com/nevcea-sub/minecraft-server-launcher/internal/config"
 	"github.com/nevcea-sub/minecraft-server-launcher/internal/download"
 	"github.com/nevcea-sub/minecraft-server-launcher/internal/server"
@@ -16,7 +17,7 @@ var (
 	logLevel   = flag.String("log-level", "info", "Log level (trace, debug, info, warn, error)")
 	verbose    = flag.Bool("verbose", false, "Enable verbose logging")
 	quiet      = flag.Bool("q", false, "Suppress all output except errors")
-	configFile = flag.String("c", "config.toml", "Custom config file path")
+	configFile = flag.String("c", "config.yaml", "Custom config file path")
 	workDir    = flag.String("w", "", "Override working directory")
 	version    = flag.String("v", "", "Override Minecraft version")
 	noPause    = flag.Bool("no-pause", false, "Don't pause on exit")
@@ -206,6 +207,16 @@ func run() error {
 
 	if err := utils.HandleEULA(); err != nil {
 		return err
+	}
+
+	if cfg.AutoBackup {
+		worlds := cfg.BackupWorlds
+		if len(worlds) == 0 {
+			worlds = []string{"world", "world_nether", "world_the_end"}
+		}
+		if err := backup.PerformBackup(worlds, cfg.BackupCount); err != nil {
+			return fmt.Errorf("backup failed: %w", err)
+		}
 	}
 
 	maxRAM := server.CalculateSmartRAM(cfg.MaxRAM, cfg.AutoRAMPercentage, cfg.MinRAM)

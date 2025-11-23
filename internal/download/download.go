@@ -8,7 +8,6 @@ import (
 	"os"
 	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/nevcea-sub/minecraft-server-launcher/internal/utils"

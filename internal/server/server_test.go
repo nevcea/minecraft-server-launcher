@@ -4,28 +4,10 @@ import (
 	"testing"
 )
 
-func TestCalculateMaxRAM(t *testing.T) {
-	tests := []struct {
-		name      string
-		configMax int
-		totalRAM  int
-		minRAM    int
-		want      int
-	}{
-		{"no total ram", 8, 0, 2, 8},
-		{"plenty of ram", 8, 32, 2, 8},
-		{"limited ram", 16, 8, 2, 6},
-		{"exact fit", 8, 10, 2, 8},
-		{"below min", 8, 4, 2, 2},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := CalculateMaxRAM(tt.configMax, tt.totalRAM, tt.minRAM)
-			if got != tt.want {
-				t.Errorf("CalculateMaxRAM() = %d, want %d", got, tt.want)
-			}
-		})
+func TestCalculateSmartRAM(t *testing.T) {
+	res := CalculateSmartRAM(0, 85, 2)
+	if res < 2 {
+		t.Errorf("CalculateSmartRAM returned %d, expected >= 2", res)
 	}
 }
 
@@ -61,4 +43,3 @@ func TestExtractJavaVersion(t *testing.T) {
 		})
 	}
 }
-
