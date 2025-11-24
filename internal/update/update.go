@@ -14,8 +14,8 @@ import (
 
 const (
 	timeout          = 30 * time.Second
-	launcherVersion = "1.0.0"
-	githubUserAgent  = "minecraft-server-launcher-updater/1.0"
+	launcherVersion = "0.3.0"
+	githubUserAgent  = "minecraft-server-launcher-updater/0.3"
 )
 
 var (
