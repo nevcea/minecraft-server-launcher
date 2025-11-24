@@ -103,7 +103,8 @@ func ValidateJarAndCalculateChecksum(jarPath string) (string, error) {
 	}()
 
 	h := sha256.New()
-	if _, err := io.Copy(h, file); err != nil {
+	buf := make([]byte, checksumBufSize)
+	if _, err := io.CopyBuffer(h, file, buf); err != nil {
 		return "", fmt.Errorf("failed to calculate checksum: %w", err)
 	}
 
@@ -139,13 +140,17 @@ func LoadChecksumFile(path string) (string, error) {
 	}
 
 	data = bytes.TrimSpace(data)
-	
-	if len(data) != 64 {
-		return "", fmt.Errorf("invalid checksum format: expected 64 characters, got %d", len(data))
+
+	const expectedChecksumLength = 64
+	if len(data) != expectedChecksumLength {
+		return "", fmt.Errorf("invalid checksum format: expected %d characters, got %d", expectedChecksumLength, len(data))
 	}
 
-	if !hexChecksumRegex.Match(data) {
-		return "", fmt.Errorf("invalid checksum format: contains non-hexadecimal characters")
+	for i := 0; i < len(data); i++ {
+		c := data[i]
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return "", fmt.Errorf("invalid checksum format: contains non-hexadecimal characters")
+		}
 	}
 
 	return string(data), nil

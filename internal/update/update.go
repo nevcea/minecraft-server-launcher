@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,6 +23,8 @@ const (
 var (
 	launcherVersion = "dev"
 	githubUserAgent = "minecraft-server-launcher-updater"
+	cachedGitVersion string
+	gitVersionOnce   sync.Once
 )
 
 var (
@@ -59,18 +62,23 @@ func GetCurrentVersion() string {
 }
 
 func getVersionFromGit() string {
-	cmd := exec.Command("git", "describe", "--tags", "--abbrev=0")
-	output, err := cmd.Output()
-	if err != nil {
-		return "dev"
-	}
-	
-	version := strings.TrimSpace(string(output))
-	version = normalizeVersion(version)
-	if version == "" {
-		return "dev"
-	}
-	return version
+	gitVersionOnce.Do(func() {
+		cmd := exec.Command("git", "describe", "--tags", "--abbrev=0")
+		output, err := cmd.Output()
+		if err != nil {
+			cachedGitVersion = "dev"
+			return
+		}
+
+		version := strings.TrimSpace(string(output))
+		version = normalizeVersion(version)
+		if version == "" {
+			cachedGitVersion = "dev"
+		} else {
+			cachedGitVersion = version
+		}
+	})
+	return cachedGitVersion
 }
 
 func CheckForUpdate() (bool, *ReleaseResponse, error) {
@@ -127,21 +135,22 @@ func normalizeVersion(version string) string {
 }
 
 func compareVersions(v1, v2 string) int {
-	parts1 := strings.Split(v1, ".")
-	parts2 := strings.Split(v2, ".")
+	var i1, i2 int
+	var num1, num2 int
+	var err1, err2 error
 
-	maxLen := len(parts1)
-	if len(parts2) > maxLen {
-		maxLen = len(parts2)
-	}
+	for i1 < len(v1) || i2 < len(v2) {
+		num1, i1, err1 = parseVersionPart(v1, i1)
+		num2, i2, err2 = parseVersionPart(v2, i2)
 
-	for i := 0; i < maxLen; i++ {
-		var num1, num2 int
-		if i < len(parts1) {
-			num1, _ = strconv.Atoi(parts1[i])
+		if err1 != nil && err2 != nil {
+			return 0
 		}
-		if i < len(parts2) {
-			num2, _ = strconv.Atoi(parts2[i])
+		if err1 != nil {
+			num1 = 0
+		}
+		if err2 != nil {
+			num2 = 0
 		}
 
 		if num1 > num2 {
@@ -153,6 +162,35 @@ func compareVersions(v1, v2 string) int {
 	}
 
 	return 0
+}
+
+func parseVersionPart(s string, start int) (int, int, error) {
+	if start >= len(s) {
+		return 0, len(s), fmt.Errorf("end of string")
+	}
+
+	end := start
+	for end < len(s) && s[end] != '.' {
+		if s[end] < '0' || s[end] > '9' {
+			return 0, end, fmt.Errorf("invalid character")
+		}
+		end++
+	}
+
+	if end == start {
+		return 0, end, fmt.Errorf("empty part")
+	}
+
+	num, err := strconv.Atoi(s[start:end])
+	if err != nil {
+		return 0, end, err
+	}
+
+	if end < len(s) {
+		end++
+	}
+
+	return num, end, nil
 }
 
 func getAssetForCurrentOS(release *ReleaseResponse) *Asset {

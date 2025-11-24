@@ -5,15 +5,31 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 )
 
-var (
-	jarFileRegex = regexp.MustCompile(`paper-(.+)-(\d+)\.jar`)
-)
+func parseJarFileName(filename string) (version string, build int, ok bool) {
+	if !strings.HasPrefix(filename, "paper-") || !strings.HasSuffix(filename, ".jar") {
+		return "", 0, false
+	}
+
+	name := filename[6 : len(filename)-4]
+	lastDash := strings.LastIndex(name, "-")
+	if lastDash < 0 {
+		return "", 0, false
+	}
+
+	version = name[:lastDash]
+	buildStr := name[lastDash+1:]
+	build, err := strconv.Atoi(buildStr)
+	if err != nil {
+		return "", 0, false
+	}
+
+	return version, build, true
+}
 
 func FindJarFile() (string, error) {
 	files, err := filepath.Glob("paper-*.jar")
@@ -47,17 +63,15 @@ func FindJarFile() (string, error) {
 			continue
 		}
 
-		matches := jarFileRegex.FindStringSubmatch(file)
-		if len(matches) == 3 {
-			build, err := strconv.Atoi(matches[2])
-			if err == nil {
-				jars = append(jars, jarInfo{
-					path:    file,
-					version: matches[1],
-					build:   build,
-					modTime: info.ModTime().Unix(),
-				})
-			}
+		baseName := filepath.Base(file)
+		version, build, ok := parseJarFileName(baseName)
+		if ok {
+			jars = append(jars, jarInfo{
+				path:    file,
+				version: version,
+				build:   build,
+				modTime: info.ModTime().Unix(),
+			})
 		} else {
 			jars = append(jars, jarInfo{
 				path:    file,

@@ -134,9 +134,9 @@ func extractJavaVersion(output string) string {
 			}
 		}
 
-		startIdx := strings.Index(line, "\"")
+		startIdx := strings.IndexByte(line, '"')
 		if startIdx >= 0 {
-			endIdx := strings.Index(line[startIdx+1:], "\"")
+			endIdx := strings.IndexByte(line[startIdx+1:], '"')
 			if endIdx >= 0 {
 				return line[startIdx+1 : startIdx+1+endIdx]
 			}
