@@ -11,7 +11,10 @@ import (
 	"time"
 )
 
-const BackupDir = "backups"
+const (
+	BackupDir     = "backups"
+	backupBufSize = 32 * 1024
+)
 
 func PerformBackup(worlds []string, retentionCount int) error {
 	if err := os.MkdirAll(BackupDir, 0755); err != nil {
@@ -23,7 +26,7 @@ func PerformBackup(worlds []string, retentionCount int) error {
 		return fmt.Errorf("backup directory is not writable: %w", err)
 	}
 	if err := os.Remove(testFile); err != nil {
-		_ = err
+		return fmt.Errorf("failed to clean up test file: %w", err)
 	}
 
 	existingWorlds := filterExistingWorlds(worlds)
@@ -120,10 +123,12 @@ func createZip(targetFile string, worlds []string) error {
 				return fmt.Errorf("failed to open file: %w", err)
 			}
 
-			buf := make([]byte, 32*1024)
+			buf := make([]byte, backupBufSize)
 			_, err = io.CopyBuffer(writer, file, buf)
 			if closeErr := file.Close(); closeErr != nil {
-				_ = closeErr
+				if err == nil {
+					err = fmt.Errorf("failed to close file: %w", closeErr)
+				}
 			}
 			return err
 		})

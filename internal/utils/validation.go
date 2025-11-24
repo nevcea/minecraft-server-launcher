@@ -12,7 +12,10 @@ import (
 	"strings"
 )
 
-const minJarSize = 22
+const (
+	minJarSize = 22
+	zipMagicPK = 0x504B
+)
 
 var (
 	hexChecksumRegex = regexp.MustCompile(`^[0-9a-fA-F]{64}$`)
@@ -47,7 +50,8 @@ func validateJarStructure(jarPath string) (*zip.Reader, error) {
 		return nil, fmt.Errorf("failed to read magic number: %w", err)
 	}
 
-	if magic[0] != 0x50 || magic[1] != 0x4B {
+	expectedMagic := []byte{0x50, 0x4B}
+	if magic[0] != expectedMagic[0] || magic[1] != expectedMagic[1] {
 		return nil, fmt.Errorf("invalid JAR file: missing ZIP magic number (expected PK, found %02X%02X)", magic[0], magic[1])
 	}
 
@@ -84,65 +88,19 @@ func ValidateJarFile(jarPath string) error {
 }
 
 func ValidateJarAndCalculateChecksum(jarPath string) (string, error) {
-	info, err := os.Stat(jarPath)
-	if err != nil {
-		return "", fmt.Errorf("JAR file does not exist: %s", jarPath)
-	}
-
-	if info.Size() == 0 {
-		return "", fmt.Errorf("JAR file is empty: %s", jarPath)
-	}
-
-	if info.Size() < minJarSize {
-		return "", fmt.Errorf("JAR file is too small (%d bytes): %s", info.Size(), jarPath)
+	if _, err := validateJarStructure(jarPath); err != nil {
+		return "", err
 	}
 
 	file, err := os.Open(jarPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to open JAR: %w", err)
+		return "", fmt.Errorf("failed to open JAR for checksum: %w", err)
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
 			_ = err
 		}
 	}()
-
-	magic := make([]byte, 2)
-	if _, err := io.ReadFull(file, magic); err != nil {
-		return "", fmt.Errorf("failed to read magic number: %w", err)
-	}
-
-	if magic[0] != 0x50 || magic[1] != 0x4B {
-		return "", fmt.Errorf("invalid JAR file: missing ZIP magic number (expected PK, found %02X%02X)", magic[0], magic[1])
-	}
-
-	if _, err := file.Seek(0, 0); err != nil {
-		return "", fmt.Errorf("failed to seek file: %w", err)
-	}
-	reader, err := zip.NewReader(file, info.Size())
-	if err != nil {
-		return "", fmt.Errorf("failed to parse JAR as ZIP: %w", err)
-	}
-
-	if len(reader.File) == 0 {
-		return "", fmt.Errorf("JAR file contains no entries")
-	}
-
-	hasManifest := false
-	for _, f := range reader.File {
-		if f.Name == "META-INF/MANIFEST.MF" {
-			hasManifest = true
-			break
-		}
-	}
-
-	if !hasManifest {
-		fmt.Fprintf(os.Stderr, "[WARN] JAR file missing META-INF/MANIFEST.MF: %s\n", jarPath)
-	}
-
-	if _, err := file.Seek(0, 0); err != nil {
-		return "", fmt.Errorf("failed to seek file: %w", err)
-	}
 
 	h := sha256.New()
 	if _, err := io.Copy(h, file); err != nil {

@@ -17,9 +17,10 @@ var (
 )
 
 const (
-	minJavaVersion    = 17
-	minJavaVersionZGC = 11
-	javaCmd           = "java"
+	minJavaVersion     = 17
+	minJavaVersionZGC  = 11
+	minRAMForZGC       = 4
+	javaCmd            = "java"
 )
 
 var aikarFlags = []string{
@@ -117,33 +118,35 @@ func extractJavaVersion(output string) string {
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		lowerLine := strings.ToLower(line)
-		if strings.Contains(lowerLine, "version") {
-			matches := javaVersionRegex.FindStringSubmatch(line)
-			if len(matches) > 0 {
-				for i := 1; i < len(matches); i++ {
-					if matches[i] != "" {
-						version := strings.Trim(matches[i], "\"")
-						if len(version) > 0 {
-							return version
-						}
+		if !strings.Contains(lowerLine, "version") {
+			continue
+		}
+
+		matches := javaVersionRegex.FindStringSubmatch(line)
+		if len(matches) > 0 {
+			for i := 1; i < len(matches); i++ {
+				if matches[i] != "" {
+					version := strings.Trim(matches[i], "\"")
+					if len(version) > 0 {
+						return version
 					}
 				}
 			}
-			startIdx := strings.Index(line, "\"")
-			if startIdx >= 0 {
-				endIdx := strings.Index(line[startIdx+1:], "\"")
-				if endIdx >= 0 {
-					return line[startIdx+1 : startIdx+1+endIdx]
-				}
+		}
+
+		startIdx := strings.Index(line, "\"")
+		if startIdx >= 0 {
+			endIdx := strings.Index(line[startIdx+1:], "\"")
+			if endIdx >= 0 {
+				return line[startIdx+1 : startIdx+1+endIdx]
 			}
-			parts := strings.Fields(line)
-			for _, part := range parts {
-				if strings.HasPrefix(part, "1.") || (len(part) > 0 && part[0] >= '1' && part[0] <= '9') {
-					part = strings.Trim(part, "\"")
-					if len(part) > 0 {
-						return part
-					}
-				}
+		}
+
+		parts := strings.Fields(line)
+		for _, part := range parts {
+			part = strings.Trim(part, "\"")
+			if (strings.HasPrefix(part, "1.") || (len(part) > 0 && part[0] >= '1' && part[0] <= '9')) && len(part) > 0 {
+				return part
 			}
 		}
 	}
@@ -210,7 +213,7 @@ func RunServer(jarFile string, minRAM, maxRAM int, useZGC bool, javaPath string,
 		}
 
 		if javaVersion < 17 {
-			filteredFlags := make([]string, 0, len(zgcFlags))
+			filteredFlags := make([]string, 0, len(zgcFlags)-1)
 			for _, flag := range zgcFlags {
 				if !strings.Contains(flag, "ZGenerational") {
 					filteredFlags = append(filteredFlags, flag)
@@ -223,8 +226,8 @@ func RunServer(jarFile string, minRAM, maxRAM int, useZGC bool, javaPath string,
 			fmt.Println("[INFO] Using Z Garbage Collector (ZGC)")
 		}
 
-		if maxRAM < 4 {
-			fmt.Fprintf(os.Stderr, "[WARN] ZGC enabled but MaxRAM < 4GB, G1GC may perform better\n")
+		if maxRAM < minRAMForZGC {
+			fmt.Fprintf(os.Stderr, "[WARN] ZGC enabled but MaxRAM < %dGB, G1GC may perform better\n", minRAMForZGC)
 		}
 	} else {
 		fmt.Println("[INFO] Using G1 Garbage Collector (G1GC)")
@@ -241,6 +244,7 @@ func RunServer(jarFile string, minRAM, maxRAM int, useZGC bool, javaPath string,
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
 
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
@@ -260,8 +264,9 @@ func RunServer(jarFile string, minRAM, maxRAM int, useZGC bool, javaPath string,
 	case sig := <-sigChan:
 		fmt.Printf("\n[INFO] Received signal: %v, shutting down server...\n", sig)
 		if err := cmd.Process.Signal(sig); err != nil {
+			fmt.Fprintf(os.Stderr, "[WARN] Failed to send signal to process: %v\n", err)
 			if killErr := cmd.Process.Kill(); killErr != nil {
-				_ = killErr
+				fmt.Fprintf(os.Stderr, "[WARN] Failed to kill process: %v\n", killErr)
 			}
 		}
 		<-done

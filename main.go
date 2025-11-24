@@ -59,6 +59,18 @@ func shouldLog(level logLevelType) bool {
 	return level >= currentLogLevel
 }
 
+func promptYesNo(message string) bool {
+	fmt.Printf("[PROMPT] %s [Y/N]: ", message)
+	reader := bufio.NewReader(os.Stdin)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		logMessage(logLevelWarn, "Failed to read user input: %v", err)
+		return false
+	}
+	response = strings.TrimSpace(response)
+	return response == "Y" || response == "y"
+}
+
 func logMessage(level logLevelType, format string, args ...interface{}) {
 	if shouldLog(level) {
 		prefix := ""
@@ -91,11 +103,14 @@ func main() {
 	currentLogLevel = parseLogLevel(*logLevel)
 
 	cfg, err := config.Load(*configFile)
-	logFilePath := "launcher.log"
-	if err == nil && cfg != nil && cfg.LogFile != "" {
-		logFilePath = cfg.LogFile
-	} else if err != nil {
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "[ERROR] Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
+	logFilePath := "launcher.log"
+	if cfg != nil && cfg.LogFile != "" {
+		logFilePath = cfg.LogFile
 	}
 
 	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
@@ -141,11 +156,7 @@ func run(cfg *config.Config) error {
 	logMessage(logLevelInfo, "Launcher version: %s", currentVersion)
 
 	if cfg == nil {
-		var err error
-		cfg, err = config.Load(*configFile)
-		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
-		}
+		return fmt.Errorf("config is nil")
 	}
 
 	hasUpdate, release, err := update.CheckForUpdate()
@@ -154,7 +165,10 @@ func run(cfg *config.Config) error {
 	} else if hasUpdate {
 		logMessage(logLevelInfo, "New launcher version available: %s", release.TagName)
 		if release.Body != "" {
-			logMessage(logLevelInfo, "Release notes: %s", strings.Split(release.Body, "\n")[0])
+			releaseNotes := strings.Split(release.Body, "\n")
+			if len(releaseNotes) > 0 && releaseNotes[0] != "" {
+				logMessage(logLevelInfo, "Release notes: %s", releaseNotes[0])
+			}
 		}
 
 		doUpdate := false
@@ -162,16 +176,8 @@ func run(cfg *config.Config) error {
 			doUpdate = true
 			logMessage(logLevelInfo, "Auto-updating launcher...")
 		} else {
-			fmt.Printf("[PROMPT] Do you want to update the launcher to %s? [Y/N]: ", release.TagName)
-			reader := bufio.NewReader(os.Stdin)
-			response, readErr := reader.ReadString('\n')
-			if readErr != nil {
-				logMessage(logLevelWarn, "Failed to read user input: %v", readErr)
-			} else {
-				response = strings.TrimSpace(response)
-				if response == "Y" || response == "y" {
-					doUpdate = true
-				}
+			if promptYesNo(fmt.Sprintf("Do you want to update the launcher to %s?", release.TagName)) {
+				doUpdate = true
 			}
 		}
 
@@ -259,15 +265,7 @@ func run(cfg *config.Config) error {
 	}
 
 	if jarFile == "" {
-		fmt.Print("[PROMPT] No Paper JAR file found. Download automatically? [Y/N]: ")
-		reader := bufio.NewReader(os.Stdin)
-		response, err := reader.ReadString('\n')
-		if err != nil {
-			return fmt.Errorf("failed to read user input: %w", err)
-		}
-		response = strings.TrimSpace(response)
-
-		if response != "Y" && response != "y" {
+		if !promptYesNo("No Paper JAR file found. Download automatically?") {
 			return fmt.Errorf("cannot start server without JAR file")
 		}
 
@@ -288,14 +286,7 @@ func run(cfg *config.Config) error {
 		if expectedChecksum != "" {
 			if err := utils.ValidateChecksum(jarFile, expectedChecksum); err != nil {
 				logMessage(logLevelWarn, "Existing JAR failed checksum validation: %v", err)
-				fmt.Print("[PROMPT] JAR file checksum validation failed. Re-download? [Y/N]: ")
-				reader := bufio.NewReader(os.Stdin)
-				response, readErr := reader.ReadString('\n')
-				if readErr != nil {
-					return fmt.Errorf("failed to read user input: %w", readErr)
-				}
-				response = strings.TrimSpace(response)
-				if response == "Y" || response == "y" {
+				if promptYesNo("JAR file checksum validation failed. Re-download?") {
 					jarFile, err = download.DownloadJar(cfg.MinecraftVersion)
 					if err != nil {
 						return fmt.Errorf("failed to re-download JAR: %w", err)
@@ -329,18 +320,11 @@ func run(cfg *config.Config) error {
 			doUpdate := false
 			if cfg.AutoUpdate {
 				doUpdate = true
-			} else {
-				fmt.Print("[PROMPT] Do you want to update? [Y/N]: ")
-				reader := bufio.NewReader(os.Stdin)
-				response, readErr := reader.ReadString('\n')
-				if readErr != nil {
-					return fmt.Errorf("failed to read user input: %w", readErr)
-				}
-				response = strings.TrimSpace(response)
-				if response == "Y" || response == "y" {
-					doUpdate = true
-				}
+		} else {
+			if promptYesNo("Do you want to update?") {
+				doUpdate = true
 			}
+		}
 
 			if doUpdate {
 				logMessage(logLevelInfo, "Updating server JAR...")

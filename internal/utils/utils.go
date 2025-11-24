@@ -85,9 +85,9 @@ func FindJarFile() (string, error) {
 func HandleEULA() error {
 	eulaFile := "eula.txt"
 
-	if data, err := os.ReadFile(eulaFile); err == nil {
-		content := string(data)
-		if strings.Contains(content, "eula=true") {
+	data, err := os.ReadFile(eulaFile)
+	if err == nil {
+		if strings.Contains(string(data), "eula=true") {
 			return nil
 		}
 	}

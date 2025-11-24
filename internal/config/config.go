@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"gopkg.in/yaml.v3"
 )
@@ -89,18 +90,16 @@ func Load(path string) (*Config, error) {
 	}
 
 	if v := os.Getenv("MIN_RAM"); v != "" {
-		var minRAM int
-		if _, err := fmt.Sscanf(v, "%d", &minRAM); err == nil && minRAM > 0 {
+		if minRAM, err := strconv.Atoi(v); err == nil && minRAM > 0 {
 			cfg.MinRAM = minRAM
-		} else if err != nil {
+		} else {
 			fmt.Fprintf(os.Stderr, "[WARN] Failed to parse MIN_RAM environment variable: %v\n", err)
 		}
 	}
 	if v := os.Getenv("MAX_RAM"); v != "" {
-		var maxRAM int
-		if _, err := fmt.Sscanf(v, "%d", &maxRAM); err == nil && maxRAM >= 0 {
+		if maxRAM, err := strconv.Atoi(v); err == nil && maxRAM >= 0 {
 			cfg.MaxRAM = maxRAM
-		} else if err != nil {
+		} else {
 			fmt.Fprintf(os.Stderr, "[WARN] Failed to parse MAX_RAM environment variable: %v\n", err)
 		}
 	}
@@ -112,6 +111,8 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+const maxSafeRAM = 128
+
 func (c *Config) Validate() error {
 	if c.MinecraftVersion == "" {
 		return fmt.Errorf("minecraft_version cannot be empty")
@@ -122,8 +123,8 @@ func (c *Config) Validate() error {
 	if c.MaxRAM != 0 && c.MinRAM > c.MaxRAM {
 		return fmt.Errorf("min_ram cannot be greater than max_ram")
 	}
-	if c.MaxRAM > 128 {
-		return fmt.Errorf("max_ram exceeds safety limit (128GB)")
+	if c.MaxRAM > maxSafeRAM {
+		return fmt.Errorf("max_ram exceeds safety limit (%dGB)", maxSafeRAM)
 	}
 	if c.AutoRAMPercentage < 10 || c.AutoRAMPercentage > 95 {
 		return fmt.Errorf("auto_ram_percentage must be between 10 and 95")

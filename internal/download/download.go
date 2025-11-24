@@ -15,13 +15,13 @@ import (
 )
 
 const (
-	apiBase      = "https://api.papermc.io/v2/projects/paper"
-	timeout      = 30 * time.Second
-	copyBufSize  = 128 * 1024
-	userAgent    = "minecraft-server-launcher/1.0"
-	maxRetries   = 3
-	retryDelay   = 2 * time.Second
-	retryBackoff = 2.0
+	apiBase        = "https://api.papermc.io/v2/projects/paper"
+	timeout        = 30 * time.Second
+	downloadBufSize = 128 * 1024
+	userAgent      = "minecraft-server-launcher/1.0"
+	maxRetries     = 3
+	retryDelay     = 2 * time.Second
+	retryBackoff   = 2.0
 )
 
 var defaultHTTPClient = &http.Client{
@@ -110,8 +110,10 @@ func DownloadJar(version string) (string, error) {
 				fmt.Printf("[OK] Existing JAR file checksum validated\n")
 				return jarName, nil
 			}
+			fmt.Printf("[INFO] Checksum validation failed, re-downloading...\n")
+		} else {
+			fmt.Printf("[INFO] No checksum file found, re-downloading to ensure integrity...\n")
 		}
-		fmt.Printf("[INFO] Re-downloading to ensure integrity...\n")
 	}
 
 	tempFile := jarName + ".part"
@@ -160,20 +162,21 @@ func doRequest(client *http.Client, url string) (*http.Response, error) {
 		req.Header.Set("User-Agent", userAgent)
 
 		resp, err := client.Do(req)
-		if err == nil && resp.StatusCode == 200 {
+		if err != nil {
+			lastErr = fmt.Errorf("request failed: %w", err)
+			if attempt < maxRetries-1 {
+				fmt.Fprintf(os.Stderr, "[WARN] Request failed (attempt %d/%d), retrying...\n", attempt+1, maxRetries)
+			}
+			continue
+		}
+
+		if resp.StatusCode == 200 {
 			return resp, nil
 		}
 
-		if resp != nil {
-			if err := resp.Body.Close(); err != nil {
-				_ = err
-			}
-		}
-
-		if err != nil {
-			lastErr = fmt.Errorf("request failed: %w", err)
-		} else {
-			lastErr = fmt.Errorf("API returned status %d", resp.StatusCode)
+		lastErr = fmt.Errorf("API returned status %d", resp.StatusCode)
+		if err := resp.Body.Close(); err != nil {
+			_ = err
 		}
 
 		if attempt < maxRetries-1 {
@@ -194,10 +197,6 @@ func getLatestVersion(client *http.Client, baseURL string) (string, error) {
 			_ = err
 		}
 	}()
-
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
 
 	var proj ProjectResponse
 	if err := json.NewDecoder(resp.Body).Decode(&proj); err != nil {
@@ -223,10 +222,6 @@ func getLatestBuild(client *http.Client, baseURL, version string) (int, error) {
 		}
 	}()
 
-	if resp.StatusCode != 200 {
-		return 0, fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
-
 	var builds BuildsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&builds); err != nil {
 		return 0, fmt.Errorf("failed to parse response: %w", err)
@@ -250,10 +245,6 @@ func getJarName(client *http.Client, baseURL, version string, build int) (string
 			_ = err
 		}
 	}()
-
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
 
 	var download DownloadResponse
 	if err := json.NewDecoder(resp.Body).Decode(&download); err != nil {
@@ -287,8 +278,8 @@ func downloadFile(client *http.Client, url, filename string) error {
 	tempFile := filename + ".part"
 
 	if _, err := os.Stat(tempFile); err == nil {
-		if err := os.Remove(tempFile); err != nil {
-			return fmt.Errorf("failed to remove existing temp file: %w", err)
+		if removeErr := os.Remove(tempFile); removeErr != nil {
+			return fmt.Errorf("failed to remove existing temp file: %w", removeErr)
 		}
 	}
 
@@ -331,7 +322,7 @@ func downloadFile(client *http.Client, url, filename string) error {
 		bar = progressbar.DefaultBytes(-1, "Downloading")
 	}
 
-	buf := make([]byte, copyBufSize)
+	buf := make([]byte, downloadBufSize)
 	var writer io.Writer = out
 	if bar != nil {
 		writer = io.MultiWriter(out, bar)
@@ -349,8 +340,8 @@ func downloadFile(client *http.Client, url, filename string) error {
 	success = true
 
 	if _, err := os.Stat(filename); err == nil {
-		if err := os.Remove(filename); err != nil {
-			return fmt.Errorf("failed to remove existing file: %w", err)
+		if removeErr := os.Remove(filename); removeErr != nil {
+			return fmt.Errorf("failed to remove existing file: %w", removeErr)
 		}
 	}
 

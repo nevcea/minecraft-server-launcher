@@ -9,12 +9,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
 
 const (
-	timeout = 30 * time.Second
+	timeout         = 30 * time.Second
+	downloadBufSize = 128 * 1024
 )
 
 var (
@@ -136,10 +138,10 @@ func compareVersions(v1, v2 string) int {
 	for i := 0; i < maxLen; i++ {
 		var num1, num2 int
 		if i < len(parts1) {
-			fmt.Sscanf(parts1[i], "%d", &num1)
+			num1, _ = strconv.Atoi(parts1[i])
 		}
 		if i < len(parts2) {
-			fmt.Sscanf(parts2[i], "%d", &num2)
+			num2, _ = strconv.Atoi(parts2[i])
 		}
 
 		if num1 > num2 {
@@ -257,7 +259,7 @@ func DownloadUpdate(release *ReleaseResponse) (string, error) {
 		}
 	}()
 
-	buf := make([]byte, 128*1024)
+	buf := make([]byte, downloadBufSize)
 	_, err = io.CopyBuffer(out, resp.Body, buf)
 	if err != nil {
 		return "", fmt.Errorf("failed to write file: %w", err)
