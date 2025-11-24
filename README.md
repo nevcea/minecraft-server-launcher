@@ -5,12 +5,13 @@ A fast and reliable Minecraft Paper server launcher written in Go.
 ## Features
 
 - **Automatic launcher updates** - Check and update the launcher automatically from GitHub Releases
-- Automatic JAR download and update management
+- Automatic JAR download and update management (Paper)
 - Smart RAM allocation based on system resources
 - Java version validation (Java 17+)
 - SHA-256 checksum verification
 - Automatic world backups
 - EULA auto-acceptance
+- Configurable server arguments and Java paths
 
 ## Requirements
 
@@ -49,16 +50,20 @@ Edit `config.yaml`:
 minecraft_version: "latest"
 auto_update: false              # Auto-update Minecraft server JAR
 auto_update_launcher: true      # Auto-update the launcher itself (enabled by default)
+auto_restart: false             # Automatically restart the server after crash/stop
 auto_backup: true
 backup_count: 10
 backup_worlds:
   - world
   - world_nether
   - world_the_end
-min_ram: 2
-max_ram: 0
-use_zgc: false
-auto_ram_percentage: 85
+min_ram: 2                      # Minimum RAM in GB
+max_ram: 0                      # Maximum RAM in GB (0 = auto-calculated)
+use_zgc: false                  # Use ZGC garbage collector
+auto_ram_percentage: 85         # Percentage of available RAM to use if max_ram is 0
+java_path: ""                   # Custom path to Java executable
+work_dir: ""                    # Working directory
+log_file: "launcher.log"        # Log file path
 server_args:
   - nogui
 ```
@@ -66,12 +71,14 @@ server_args:
 ### Command-Line Options
 
 ```
-  -c string    Custom config file path (default "config.yaml")
-  -w string    Override working directory
-  -v string    Override Minecraft version
-  -q           Suppress all output except errors
-  -verbose     Enable verbose logging
-  -no-pause    Don't pause on exit
+  -c string       Custom config file path (default "config.yaml")
+  -w string       Override working directory
+  -v string       Override Minecraft version
+  -log-level string
+                  Log level (trace, debug, info, warn, error) (default "info")
+  -verbose        Enable verbose logging (sets log-level to debug)
+  -q              Suppress all output except errors (sets log-level to error)
+  -no-pause       Don't pause on exit
 ```
 
 ### Auto-Update Feature
@@ -80,7 +87,7 @@ The launcher can automatically check for and install updates from GitHub Release
 
 - **Manual Update Check**: When a new version is available, you'll be prompted to update
 - **Automatic Updates**: Set `auto_update_launcher: true` in `config.yaml` to automatically download and install updates
-- **Update Process**: 
+- **Update Process**:
   - The launcher checks GitHub Releases API on startup
   - Downloads the appropriate binary for your OS/architecture
   - Backs up the current executable (`.old` extension)
@@ -91,6 +98,8 @@ The launcher can automatically check for and install updates from GitHub Release
 
 - `MINECRAFT_VERSION`: Override Minecraft version
 - `WORK_DIR`: Override working directory
+- `JAVA_PATH`: Override Java executable path
+- `LOG_FILE`: Override log file path
 - `MIN_RAM`: Override minimum RAM
 - `MAX_RAM`: Override maximum RAM
 
