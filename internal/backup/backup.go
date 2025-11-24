@@ -140,6 +140,10 @@ func createZip(targetFile string, worlds []string) error {
 }
 
 func rotateBackups(limit int) error {
+	if limit <= 0 {
+		return nil
+	}
+
 	files, err := os.ReadDir(BackupDir)
 	if err != nil {
 		return fmt.Errorf("failed to read backup directory: %w", err)

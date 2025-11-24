@@ -11,6 +11,10 @@ import (
 	"strings"
 )
 
+var (
+	jarFileRegex = regexp.MustCompile(`paper-(.+)-(\d+)\.jar`)
+)
+
 func FindJarFile() (string, error) {
 	files, err := filepath.Glob("paper-*.jar")
 	if err != nil {
@@ -36,7 +40,6 @@ func FindJarFile() (string, error) {
 	}
 
 	var jars []jarInfo
-	re := regexp.MustCompile(`paper-(.+)-(\d+)\.jar`)
 
 	for _, file := range files {
 		info, err := os.Stat(file)
@@ -44,7 +47,7 @@ func FindJarFile() (string, error) {
 			continue
 		}
 
-		matches := re.FindStringSubmatch(file)
+		matches := jarFileRegex.FindStringSubmatch(file)
 		if len(matches) == 3 {
 			build, err := strconv.Atoi(matches[2])
 			if err == nil {

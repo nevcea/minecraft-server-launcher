@@ -42,9 +42,12 @@ type DownloadResponse struct {
 	} `json:"downloads"`
 }
 
+var (
+	jarNameRegex = regexp.MustCompile(`paper-(.+)-(\d+)\.jar`)
+)
+
 func CheckUpdate(jarName string) (bool, int, string, error) {
-	re := regexp.MustCompile(`paper-(.+)-(\d+)\.jar`)
-	matches := re.FindStringSubmatch(jarName)
+	matches := jarNameRegex.FindStringSubmatch(jarName)
 	if len(matches) != 3 {
 		return false, 0, "", fmt.Errorf("invalid jar filename format: %s", jarName)
 	}

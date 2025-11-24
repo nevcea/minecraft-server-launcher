@@ -5,10 +5,15 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"regexp"
 	"strings"
 	"syscall"
 
 	"github.com/shirou/gopsutil/v3/mem"
+)
+
+var (
+	javaVersionRegex = regexp.MustCompile(`"([^"]+)"|version\s+"?([0-9.]+)"?|(\d+\.\d+\.\d+)|(\d+)`)
 )
 
 const (
@@ -112,6 +117,17 @@ func extractJavaVersion(output string) string {
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if strings.Contains(strings.ToLower(line), "version") {
+			matches := javaVersionRegex.FindStringSubmatch(line)
+			if len(matches) > 0 {
+				for i := 1; i < len(matches); i++ {
+					if matches[i] != "" {
+						version := strings.Trim(matches[i], "\"")
+						if len(version) > 0 {
+							return version
+						}
+					}
+				}
+			}
 			startIdx := strings.Index(line, "\"")
 			if startIdx >= 0 {
 				endIdx := strings.Index(line[startIdx+1:], "\"")
@@ -191,7 +207,8 @@ func RunServer(jarFile string, minRAM, maxRAM int, useZGC bool, javaPath string,
 		if javaVersion < minJavaVersionZGC {
 			return fmt.Errorf("ZGC requires Java %d or higher, found Java %d", minJavaVersionZGC, javaVersion)
 		}
-		if javaVersion < 17 && strings.Contains(strings.Join(zgcFlags, " "), "ZGenerational") {
+
+		if javaVersion < 17 {
 			var filteredFlags []string
 			for _, flag := range zgcFlags {
 				if !strings.Contains(flag, "ZGenerational") {
