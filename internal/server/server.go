@@ -4,15 +4,17 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/shirou/gopsutil/v3/mem"
 )
 
 const (
-	minJavaVersion = 17
-	javaCmd        = "java"
+	minJavaVersion    = 17
+	minJavaVersionZGC = 11
+	javaCmd           = "java"
 )
 
 var aikarFlags = []string{
@@ -48,28 +50,32 @@ var zgcFlags = []string{
 	"-Dfile.encoding=UTF-8",
 }
 
-func CheckJava() (string, error) {
-	cmd := exec.Command(javaCmd, "-version")
+func CheckJava(javaPath string) (string, int, error) {
+	if javaPath == "" {
+		javaPath = javaCmd
+	}
+
+	cmd := exec.Command(javaPath, "-version")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("Java is not installed or not in PATH")
+		return "", 0, fmt.Errorf("Java is not installed or not found at: %s", javaPath)
 	}
 
 	versionStr := extractJavaVersion(string(output))
 	if versionStr == "unknown" {
-		return "", fmt.Errorf("failed to parse Java version from output")
+		return "", 0, fmt.Errorf("failed to parse Java version from output")
 	}
 
 	version, err := parseJavaVersion(versionStr)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse Java version: %w", err)
+		return "", 0, fmt.Errorf("failed to parse Java version: %w", err)
 	}
 
 	if version < minJavaVersion {
-		return "", fmt.Errorf("Java %d or higher is required, found Java %d", minJavaVersion, version)
+		return "", 0, fmt.Errorf("Java %d or higher is required, found Java %d", minJavaVersion, version)
 	}
 
-	return versionStr, nil
+	return versionStr, version, nil
 }
 
 func parseJavaVersion(versionStr string) (int, error) {
@@ -128,16 +134,13 @@ func extractJavaVersion(output string) string {
 }
 
 func GetSystemRAM() (totalGB int, availableGB int, err error) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
-		v, err := mem.VirtualMemory()
-		if err != nil {
-			return 0, 0, err
-		}
-		totalGB = int(v.Total / (1024 * 1024 * 1024))
-		availableGB = int(v.Available / (1024 * 1024 * 1024))
-		return totalGB, availableGB, nil
+	v, err := mem.VirtualMemory()
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to get system memory: %w", err)
 	}
-	return 0, 0, fmt.Errorf("unsupported OS")
+	totalGB = int(v.Total / (1024 * 1024 * 1024))
+	availableGB = int(v.Available / (1024 * 1024 * 1024))
+	return totalGB, availableGB, nil
 }
 
 func CalculateSmartRAM(configMax, percentage, minRAM int) int {
@@ -174,18 +177,37 @@ func CalculateSmartRAM(configMax, percentage, minRAM int) int {
 	return calculated
 }
 
-func RunServer(jarFile string, minRAM, maxRAM int, useZGC bool, serverArgs []string) error {
+func RunServer(jarFile string, minRAM, maxRAM int, useZGC bool, javaPath string, javaVersion int, serverArgs []string) error {
+	if javaPath == "" {
+		javaPath = javaCmd
+	}
+
 	args := []string{
 		fmt.Sprintf("-Xms%dG", minRAM),
 		fmt.Sprintf("-Xmx%dG", maxRAM),
 	}
 
 	if useZGC {
+		if javaVersion < minJavaVersionZGC {
+			return fmt.Errorf("ZGC requires Java %d or higher, found Java %d", minJavaVersionZGC, javaVersion)
+		}
+		if javaVersion < 17 && strings.Contains(strings.Join(zgcFlags, " "), "ZGenerational") {
+			var filteredFlags []string
+			for _, flag := range zgcFlags {
+				if !strings.Contains(flag, "ZGenerational") {
+					filteredFlags = append(filteredFlags, flag)
+				}
+			}
+			args = append(args, filteredFlags...)
+			fmt.Println("[INFO] Using Z Garbage Collector (ZGC) - Generational ZGC requires Java 17+")
+		} else {
+			args = append(args, zgcFlags...)
+			fmt.Println("[INFO] Using Z Garbage Collector (ZGC)")
+		}
+
 		if maxRAM < 4 {
 			fmt.Fprintf(os.Stderr, "[WARN] ZGC enabled but MaxRAM < 4GB, G1GC may perform better\n")
 		}
-		fmt.Println("[INFO] Using Z Garbage Collector (ZGC)")
-		args = append(args, zgcFlags...)
 	} else {
 		fmt.Println("[INFO] Using G1 Garbage Collector (G1GC)")
 		args = append(args, aikarFlags...)
@@ -194,18 +216,35 @@ func RunServer(jarFile string, minRAM, maxRAM int, useZGC bool, serverArgs []str
 	args = append(args, "-jar", jarFile)
 	args = append(args, serverArgs...)
 
-	cmd := exec.Command(javaCmd, args...)
+	cmd := exec.Command(javaPath, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
 
-	if err := cmd.Wait(); err != nil {
-		return fmt.Errorf("server stopped with error: %w", err)
-	}
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
 
-	return nil
+	select {
+	case err := <-done:
+		if err != nil {
+			return fmt.Errorf("server stopped with error: %w", err)
+		}
+		return nil
+	case sig := <-sigChan:
+		fmt.Printf("\n[INFO] Received signal: %v, shutting down server...\n", sig)
+		if err := cmd.Process.Signal(sig); err != nil {
+			cmd.Process.Kill()
+		}
+		<-done
+		return fmt.Errorf("server stopped by signal: %v", sig)
+	}
 }

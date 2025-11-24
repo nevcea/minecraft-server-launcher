@@ -7,49 +7,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const defaultConfig = `# Minecraft Server Launcher Configuration
-# Edit this file to customize server settings
-
-# Minecraft version (use "latest" for the latest version)
-minecraft_version: "latest"
-
-# Auto update Paper server (Check for updates on startup)
+const defaultConfig = `minecraft_version: "latest"
 auto_update: false
-
-# Auto Backup Settings
-# true: Backup worlds before server start
 auto_backup: true
-# Number of backups to keep (older backups will be deleted)
 backup_count: 10
-# Worlds to backup (folder names)
 backup_worlds:
   - world
   - world_nether
   - world_the_end
-
-# Auto Restart Settings
-# (currently unused, reserved for future use)
 auto_restart: false
-
-# Minimum RAM in GB
 min_ram: 2
-
-# Maximum RAM in GB (set to 0 for auto-calculation based on available system RAM)
 max_ram: 0
-
-# Use ZGC garbage collector (Recommended for high RAM, requires Java 15+)
 use_zgc: false
-
-# Percentage of system RAM to use when max_ram is 0 (Auto mode)
-# Default: 85 (Uses 85% of available RAM)
 auto_ram_percentage: 85
-
-# Server arguments
 server_args:
   - nogui
-
-# Working directory (optional, defaults to current directory)
-# work_dir: "./server"
 `
 
 type Config struct {
@@ -65,6 +37,8 @@ type Config struct {
 	AutoRAMPercentage int      `yaml:"auto_ram_percentage"`
 	ServerArgs        []string `yaml:"server_args"`
 	WorkDir           string   `yaml:"work_dir"`
+	JavaPath          string   `yaml:"java_path"`
+	LogFile           string   `yaml:"log_file"`
 }
 
 func Load(path string) (*Config, error) {
@@ -76,12 +50,6 @@ func Load(path string) (*Config, error) {
 	}
 
 	var cfg Config
-	cfg.AutoRAMPercentage = 85
-	cfg.AutoUpdate = false
-	cfg.AutoBackup = true
-	cfg.BackupCount = 10
-	cfg.BackupWorlds = []string{"world", "world_nether", "world_the_end"}
-	cfg.AutoRestart = false
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -92,23 +60,46 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
+	if cfg.AutoRAMPercentage == 0 {
+		cfg.AutoRAMPercentage = 85
+	}
+	if len(cfg.BackupWorlds) == 0 {
+		cfg.BackupWorlds = []string{"world", "world_nether", "world_the_end"}
+	}
+	if cfg.BackupCount == 0 {
+		cfg.BackupCount = 10
+	}
+	if cfg.LogFile == "" {
+		cfg.LogFile = "launcher.log"
+	}
+
 	if v := os.Getenv("MINECRAFT_VERSION"); v != "" {
 		cfg.MinecraftVersion = v
 	}
 	if v := os.Getenv("WORK_DIR"); v != "" {
 		cfg.WorkDir = v
 	}
+	if v := os.Getenv("JAVA_PATH"); v != "" {
+		cfg.JavaPath = v
+	}
+	if v := os.Getenv("LOG_FILE"); v != "" {
+		cfg.LogFile = v
+	}
 
 	if v := os.Getenv("MIN_RAM"); v != "" {
 		var minRAM int
 		if _, err := fmt.Sscanf(v, "%d", &minRAM); err == nil && minRAM > 0 {
 			cfg.MinRAM = minRAM
+		} else if err != nil {
+			fmt.Fprintf(os.Stderr, "[WARN] Failed to parse MIN_RAM environment variable: %v\n", err)
 		}
 	}
 	if v := os.Getenv("MAX_RAM"); v != "" {
 		var maxRAM int
 		if _, err := fmt.Sscanf(v, "%d", &maxRAM); err == nil && maxRAM >= 0 {
 			cfg.MaxRAM = maxRAM
+		} else if err != nil {
+			fmt.Fprintf(os.Stderr, "[WARN] Failed to parse MAX_RAM environment variable: %v\n", err)
 		}
 	}
 

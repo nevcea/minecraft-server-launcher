@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -14,13 +17,66 @@ func FindJarFile() (string, error) {
 		return "", fmt.Errorf("failed to search for JAR files: %w", err)
 	}
 
+	if len(files) == 0 {
+		return "", nil
+	}
+
+	if len(files) == 1 {
+		if info, err := os.Stat(files[0]); err == nil && !info.IsDir() {
+			return files[0], nil
+		}
+		return "", nil
+	}
+
+	type jarInfo struct {
+		path     string
+		version  string
+		build    int
+		modTime  int64
+	}
+
+	var jars []jarInfo
+	re := regexp.MustCompile(`paper-(.+)-(\d+)\.jar`)
+
 	for _, file := range files {
-		if info, err := os.Stat(file); err == nil && !info.IsDir() {
-			return file, nil
+		info, err := os.Stat(file)
+		if err != nil || info.IsDir() {
+			continue
+		}
+
+		matches := re.FindStringSubmatch(file)
+		if len(matches) == 3 {
+			build, err := strconv.Atoi(matches[2])
+			if err == nil {
+				jars = append(jars, jarInfo{
+					path:    file,
+					version: matches[1],
+					build:   build,
+					modTime: info.ModTime().Unix(),
+				})
+			}
+		} else {
+			jars = append(jars, jarInfo{
+				path:    file,
+				version: "",
+				build:   0,
+				modTime: info.ModTime().Unix(),
+			})
 		}
 	}
 
-	return "", nil
+	if len(jars) == 0 {
+		return "", nil
+	}
+
+	sort.Slice(jars, func(i, j int) bool {
+		if jars[i].build != jars[j].build {
+			return jars[i].build > jars[j].build
+		}
+		return jars[i].modTime > jars[j].modTime
+	})
+
+	return jars[0].path, nil
 }
 
 func HandleEULA() error {

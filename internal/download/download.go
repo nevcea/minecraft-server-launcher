@@ -15,10 +15,13 @@ import (
 )
 
 const (
-	apiBase     = "https://api.papermc.io/v2/projects/paper"
-	timeout     = 30 * time.Second
-	copyBufSize = 128 * 1024
-	userAgent   = "minecraft-server-launcher/1.0"
+	apiBase        = "https://api.papermc.io/v2/projects/paper"
+	timeout        = 30 * time.Second
+	copyBufSize    = 128 * 1024
+	userAgent      = "minecraft-server-launcher/1.0"
+	maxRetries     = 3
+	retryDelay     = 2 * time.Second
+	retryBackoff   = 2.0
 )
 
 type ProjectResponse struct {
@@ -132,12 +135,42 @@ func DownloadJar(version string) (string, error) {
 }
 
 func doRequest(client *http.Client, url string) (*http.Response, error) {
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+	var lastErr error
+	delay := retryDelay
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(delay)
+			delay = time.Duration(float64(delay) * retryBackoff)
+		}
+
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+		req.Header.Set("User-Agent", userAgent)
+
+		resp, err := client.Do(req)
+		if err == nil && resp.StatusCode == 200 {
+			return resp, nil
+		}
+
+		if resp != nil {
+			resp.Body.Close()
+		}
+
+		if err != nil {
+			lastErr = fmt.Errorf("request failed: %w", err)
+		} else {
+			lastErr = fmt.Errorf("API returned status %d", resp.StatusCode)
+		}
+
+		if attempt < maxRetries-1 {
+			fmt.Fprintf(os.Stderr, "[WARN] Request failed (attempt %d/%d), retrying...\n", attempt+1, maxRetries)
+		}
 	}
-	req.Header.Set("User-Agent", userAgent)
-	return client.Do(req)
+
+	return nil, fmt.Errorf("request failed after %d attempts: %w", maxRetries, lastErr)
 }
 
 func getLatestVersion(client *http.Client, baseURL string) (string, error) {
@@ -255,13 +288,22 @@ func downloadFile(client *http.Client, url, filename string) error {
 		}
 	}()
 
-	bar := progressbar.DefaultBytes(
-		resp.ContentLength,
-		"Downloading",
-	)
+	var bar *progressbar.ProgressBar
+	if resp.ContentLength > 0 {
+		bar = progressbar.DefaultBytes(
+			resp.ContentLength,
+			"Downloading",
+		)
+	} else {
+		bar = progressbar.DefaultBytes(-1, "Downloading")
+	}
 
 	buf := make([]byte, copyBufSize)
-	_, err = io.CopyBuffer(io.MultiWriter(out, bar), resp.Body, buf)
+	var writer io.Writer = out
+	if bar != nil {
+		writer = io.MultiWriter(out, bar)
+	}
+	_, err = io.CopyBuffer(writer, resp.Body, buf)
 	if err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}

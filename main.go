@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/nevcea-sub/minecraft-server-launcher/internal/backup"
 	"github.com/nevcea-sub/minecraft-server-launcher/internal/config"
@@ -23,10 +25,79 @@ var (
 	noPause    = flag.Bool("no-pause", false, "Don't pause on exit")
 )
 
+type logLevelType int
+
+const (
+	logLevelTrace logLevelType = iota
+	logLevelDebug
+	logLevelInfo
+	logLevelWarn
+	logLevelError
+)
+
+var currentLogLevel = logLevelInfo
+
+func parseLogLevel(level string) logLevelType {
+	switch strings.ToLower(level) {
+	case "trace":
+		return logLevelTrace
+	case "debug":
+		return logLevelDebug
+	case "info":
+		return logLevelInfo
+	case "warn", "warning":
+		return logLevelWarn
+	case "error":
+		return logLevelError
+	default:
+		return logLevelInfo
+	}
+}
+
+func shouldLog(level logLevelType) bool {
+	return level >= currentLogLevel
+}
+
+func logMessage(level logLevelType, format string, args ...interface{}) {
+	if shouldLog(level) {
+		prefix := ""
+		switch level {
+		case logLevelTrace:
+			prefix = "[TRACE]"
+		case logLevelDebug:
+			prefix = "[DEBUG]"
+		case logLevelInfo:
+			prefix = "[INFO]"
+		case logLevelWarn:
+			prefix = "[WARN]"
+		case logLevelError:
+			prefix = "[ERROR]"
+		}
+		msg := fmt.Sprintf(format, args...)
+		fmt.Printf("%s %s\n", prefix, msg)
+		log.Printf("%s %s", prefix, msg)
+	}
+}
+
 func main() {
 	flag.Parse()
 
-	logFile, err := os.OpenFile("launcher.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if *quiet {
+		*logLevel = "error"
+	} else if *verbose {
+		*logLevel = "debug"
+	}
+	currentLogLevel = parseLogLevel(*logLevel)
+
+	cfg, err := config.Load(*configFile)
+	logFilePath := "launcher.log"
+	if err == nil && cfg != nil && cfg.LogFile != "" {
+		logFilePath = cfg.LogFile
+	} else if err != nil {
+		fmt.Fprintf(os.Stderr, "[ERROR] Failed to load config: %v\n", err)
+	}
+
+	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err == nil {
 		log.SetOutput(logFile)
 		defer logFile.Close()
@@ -37,8 +108,8 @@ func main() {
 	defer func() {
 		if r := recover(); r != nil {
 			msg := fmt.Sprintf("Unexpected error (panic): %v", r)
-			fmt.Println(msg)
-			log.Println(msg)
+			fmt.Fprintf(os.Stderr, "[ERROR] %s\n", msg)
+			log.Printf("[ERROR] %s", msg)
 			if !*noPause {
 				utils.Pause()
 			}
@@ -46,17 +117,8 @@ func main() {
 		}
 	}()
 
-	if *quiet {
-		*logLevel = "error"
-	} else if *verbose {
-		*logLevel = "debug"
-	}
-
-	if err := run(); err != nil {
-		msg := fmt.Sprintf("[ERROR] %v", err)
-		fmt.Fprintf(os.Stderr, "\n%s\n", msg)
-
-		log.Println(msg)
+	if err := run(cfg); err != nil {
+		logMessage(logLevelError, "%v", err)
 		if !*noPause {
 			utils.Pause()
 		}
@@ -68,12 +130,15 @@ func main() {
 	}
 }
 
-func run() error {
-	log.Println("Launcher started")
+func run(cfg *config.Config) error {
+	logMessage(logLevelInfo, "Launcher started")
 
-	cfg, err := config.Load(*configFile)
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+	if cfg == nil {
+		var err error
+		cfg, err = config.Load(*configFile)
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
 	}
 
 	if *version != "" {
@@ -87,36 +152,38 @@ func run() error {
 		if err := os.Chdir(cfg.WorkDir); err != nil {
 			return fmt.Errorf("failed to change directory: %w", err)
 		}
-		fmt.Printf("[INFO] Changed working directory to: %s\n", cfg.WorkDir)
-		log.Printf("Changed working directory to: %s", cfg.WorkDir)
+		logMessage(logLevelInfo, "Changed working directory to: %s", cfg.WorkDir)
 	}
 
 	type javaCheckResult struct {
 		version string
+		versionNum int
 		err     error
 	}
 	javaChan := make(chan javaCheckResult, 1)
 
+	javaPath := cfg.JavaPath
+	if javaPath == "" {
+		javaPath = "java"
+	}
+
 	go func() {
-		ver, err := server.CheckJava()
-		javaChan <- javaCheckResult{version: ver, err: err}
+		ver, verNum, err := server.CheckJava(javaPath)
+		javaChan <- javaCheckResult{version: ver, versionNum: verNum, err: err}
 	}()
 
 	totalRAM, availableRAM, err := server.GetSystemRAM()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[WARN] Failed to get system RAM info: %v\n", err)
-		log.Printf("Warning: Failed to get system RAM info: %v", err)
+		logMessage(logLevelWarn, "Failed to get system RAM info: %v", err)
 	} else {
-		fmt.Printf("[INFO] System RAM: %d GB total, %d GB available\n", totalRAM, availableRAM)
-		log.Printf("Total system RAM: %d GB, Available: %d GB", totalRAM, availableRAM)
+		logMessage(logLevelInfo, "System RAM: %d GB total, %d GB available", totalRAM, availableRAM)
 	}
 
 	javaRes := <-javaChan
 	if javaRes.err != nil {
 		return javaRes.err
 	}
-	fmt.Printf("[INFO] Java version: %s\n", javaRes.version)
-	log.Printf("Java version: %s", javaRes.version)
+	logMessage(logLevelInfo, "Java version: %s", javaRes.version)
 
 	if err := utils.HandleEULA(); err != nil {
 		return err
@@ -129,8 +196,12 @@ func run() error {
 
 	if jarFile == "" {
 		fmt.Print("[PROMPT] No Paper JAR file found. Download automatically? [Y/N]: ")
-		var response string
-		fmt.Scanln(&response)
+		reader := bufio.NewReader(os.Stdin)
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("failed to read user input: %w", err)
+		}
+		response = strings.TrimSpace(response)
 
 		if response != "Y" && response != "y" {
 			return fmt.Errorf("cannot start server without JAR file")
@@ -140,83 +211,92 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("[INFO] Found JAR file: %s\n", jarFile)
-		log.Printf("Found JAR file: %s", jarFile)
+		logMessage(logLevelInfo, "Found JAR file: %s", jarFile)
 	} else {
-		fmt.Printf("[INFO] Found JAR file: %s\n", jarFile)
-		log.Printf("Found JAR file: %s", jarFile)
+		logMessage(logLevelInfo, "Found JAR file: %s", jarFile)
 
 		checksumFile := jarFile + ".sha256"
 		expectedChecksum, err := utils.LoadChecksumFile(checksumFile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[WARN] Failed to load checksum file: %v\n", err)
-			log.Printf("Warning: Failed to load checksum file: %v", err)
+			logMessage(logLevelWarn, "Failed to load checksum file: %v", err)
 		}
 
 		if expectedChecksum != "" {
 			if err := utils.ValidateChecksum(jarFile, expectedChecksum); err != nil {
-				fmt.Fprintf(os.Stderr, "[WARN] Existing JAR failed checksum validation: %v\n", err)
-				log.Printf("Warning: Existing JAR failed checksum validation: %v", err)
+				logMessage(logLevelWarn, "Existing JAR failed checksum validation: %v", err)
+				fmt.Print("[PROMPT] JAR file checksum validation failed. Re-download? [Y/N]: ")
+				reader := bufio.NewReader(os.Stdin)
+				response, readErr := reader.ReadString('\n')
+				if readErr != nil {
+					return fmt.Errorf("failed to read user input: %w", readErr)
+				}
+				response = strings.TrimSpace(response)
+				if response == "Y" || response == "y" {
+					jarFile, err = download.DownloadJar(cfg.MinecraftVersion)
+					if err != nil {
+						return fmt.Errorf("failed to re-download JAR: %w", err)
+					}
+					logMessage(logLevelInfo, "Re-downloaded JAR file: %s", jarFile)
+				} else {
+					logMessage(logLevelWarn, "Continuing with invalid JAR file (not recommended)")
+				}
 			} else {
-				fmt.Printf("[OK] Validated existing JAR file checksum\n")
-				log.Printf("Validated existing JAR file checksum: %s", jarFile)
+				logMessage(logLevelInfo, "Validated existing JAR file checksum")
 			}
 		} else {
 			checksum, err := utils.ValidateJarAndCalculateChecksum(jarFile)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "[WARN] Existing JAR validation failed: %v\n", err)
-				log.Printf("Warning: Existing JAR validation failed: %v", err)
+				logMessage(logLevelWarn, "Existing JAR validation failed: %v", err)
 			} else {
 				if err := utils.SaveChecksumFile(checksumFile, checksum); err != nil {
-					fmt.Fprintf(os.Stderr, "[WARN] Failed to save checksum file: %v\n", err)
-					log.Printf("Warning: Failed to save checksum file: %v", err)
+					logMessage(logLevelWarn, "Failed to save checksum file: %v", err)
 				} else {
-					fmt.Printf("[OK] Calculated and saved checksum for existing JAR\n")
-					log.Printf("Calculated and saved checksum for existing JAR: %s", jarFile)
+					logMessage(logLevelInfo, "Calculated and saved checksum for existing JAR")
 				}
 			}
 		}
 
 		hasUpdate, newBuild, newJarName, err := download.CheckUpdate(jarFile)
 		if err != nil {
-			log.Printf("Warning: Failed to check for updates: %v", err)
+			logMessage(logLevelWarn, "Failed to check for updates: %v", err)
 		} else if hasUpdate {
-			msg := fmt.Sprintf("[UPDATE] New version available: %s (Build %d)", newJarName, newBuild)
-			fmt.Println(msg)
-			log.Println(msg)
+			logMessage(logLevelInfo, "New version available: %s (Build %d)", newJarName, newBuild)
 
 			doUpdate := false
 			if cfg.AutoUpdate {
 				doUpdate = true
 			} else {
 				fmt.Print("[PROMPT] Do you want to update? [Y/N]: ")
-				var response string
-				fmt.Scanln(&response)
+				reader := bufio.NewReader(os.Stdin)
+				response, readErr := reader.ReadString('\n')
+				if readErr != nil {
+					return fmt.Errorf("failed to read user input: %w", readErr)
+				}
+				response = strings.TrimSpace(response)
 				if response == "Y" || response == "y" {
 					doUpdate = true
 				}
 			}
 
 			if doUpdate {
-				fmt.Println("[INFO] Updating server JAR...")
+				logMessage(logLevelInfo, "Updating server JAR...")
 				oldJarBackup := jarFile + ".old"
 				if err := os.Rename(jarFile, oldJarBackup); err == nil {
-					fmt.Printf("[INFO] Backed up old JAR to %s\n", oldJarBackup)
+					logMessage(logLevelInfo, "Backed up old JAR to %s", oldJarBackup)
 				}
 
 				downloadedJar, err := download.DownloadJar(cfg.MinecraftVersion)
 				if err != nil {
 					if _, renameErr := os.Stat(oldJarBackup); renameErr == nil {
 						if restoreErr := os.Rename(oldJarBackup, jarFile); restoreErr == nil {
-							fmt.Printf("[INFO] Restored original JAR file\n")
+							logMessage(logLevelInfo, "Restored original JAR file")
 						}
 					}
 					return fmt.Errorf("failed to update: %w", err)
 				}
 
 				jarFile = downloadedJar
-				fmt.Printf("[INFO] Updated to: %s\n", jarFile)
-				log.Printf("Updated to: %s", jarFile)
+				logMessage(logLevelInfo, "Updated to: %s", jarFile)
 			}
 		}
 	}
@@ -233,12 +313,11 @@ func run() error {
 		}
 	}
 
-	ramMsg := fmt.Sprintf("[INFO] Starting server with %dG - %dG RAM", cfg.MinRAM, maxRAM)
+	ramMsg := fmt.Sprintf("Starting server with %dG - %dG RAM", cfg.MinRAM, maxRAM)
 	if cfg.MaxRAM == 0 {
 		ramMsg += fmt.Sprintf(" (auto-calculated: %d%% of available RAM)", cfg.AutoRAMPercentage)
 	}
-	fmt.Println(ramMsg)
-	log.Println(ramMsg)
+	logMessage(logLevelInfo, ramMsg)
 
-	return server.RunServer(jarFile, cfg.MinRAM, maxRAM, cfg.UseZGC, cfg.ServerArgs)
+	return server.RunServer(jarFile, cfg.MinRAM, maxRAM, cfg.UseZGC, javaPath, javaRes.versionNum, cfg.ServerArgs)
 }

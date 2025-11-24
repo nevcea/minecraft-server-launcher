@@ -18,6 +18,12 @@ func PerformBackup(worlds []string, retentionCount int) error {
 		return fmt.Errorf("failed to create backup directory: %w", err)
 	}
 
+	testFile := filepath.Join(BackupDir, ".write-test")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		return fmt.Errorf("backup directory is not writable: %w", err)
+	}
+	os.Remove(testFile)
+
 	existingWorlds := filterExistingWorlds(worlds)
 	if len(existingWorlds) == 0 {
 		fmt.Println("[INFO] No worlds found to backup, skipping")
@@ -69,11 +75,11 @@ func createZip(targetFile string, worlds []string) error {
 		}
 
 		err := filepath.Walk(world, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return fmt.Errorf("failed to walk directory: %w", err)
-		}
+			if err != nil {
+				return fmt.Errorf("failed to walk directory: %w", err)
+			}
 
-		if info.Name() == "session.lock" {
+			if info.Name() == "session.lock" || strings.HasSuffix(info.Name(), ".tmp") {
 				return nil
 			}
 
@@ -123,10 +129,22 @@ func rotateBackups(limit int) error {
 		return fmt.Errorf("failed to read backup directory: %w", err)
 	}
 
-	var backups []os.DirEntry
+	type backupInfo struct {
+		entry    os.DirEntry
+		modTime  time.Time
+	}
+
+	var backups []backupInfo
 	for _, file := range files {
 		if !file.IsDir() && strings.HasPrefix(file.Name(), "backup-") && strings.HasSuffix(file.Name(), ".zip") {
-			backups = append(backups, file)
+			info, err := file.Info()
+			if err != nil {
+				continue
+			}
+			backups = append(backups, backupInfo{
+				entry:   file,
+				modTime: info.ModTime(),
+			})
 		}
 	}
 
@@ -135,13 +153,13 @@ func rotateBackups(limit int) error {
 	}
 
 	sort.Slice(backups, func(i, j int) bool {
-		return backups[i].Name() < backups[j].Name()
+		return backups[i].modTime.Before(backups[j].modTime)
 	})
 
 	toDelete := len(backups) - limit
 	for i := 0; i < toDelete; i++ {
-		path := filepath.Join(BackupDir, backups[i].Name())
-		fmt.Printf("[INFO] Deleting old backup: %s\n", backups[i].Name())
+		path := filepath.Join(BackupDir, backups[i].entry.Name())
+		fmt.Printf("[INFO] Deleting old backup: %s\n", backups[i].entry.Name())
 		if err := os.Remove(path); err != nil {
 			return fmt.Errorf("failed to remove backup file: %w", err)
 		}
