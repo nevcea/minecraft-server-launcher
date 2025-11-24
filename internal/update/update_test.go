@@ -246,6 +246,46 @@ func TestCheckForUpdate_OlderVersion(t *testing.T) {
 	}
 }
 
+func TestCheckForUpdate_SameVersion(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		release := ReleaseResponse{
+			TagName: "0.4.0",
+			Name:    "Release 0.4.0",
+			Body:    "Current release",
+			Assets:  []Asset{},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(release); err != nil {
+			t.Errorf("failed to encode response: %v", err)
+		}
+	}))
+	defer ts.Close()
+
+	originalAPIBase := githubAPIBase
+	originalVersion := launcherVersion
+	defer func() {
+		githubAPIBase = originalAPIBase
+		launcherVersion = originalVersion
+	}()
+
+	githubAPIBase = ts.URL
+	launcherVersion = "0.4.0"
+
+	hasUpdate, release, err := CheckForUpdate()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if hasUpdate {
+		t.Error("expected no update available for same version")
+	}
+
+	if release != nil {
+		t.Error("expected nil release for same version")
+	}
+}
+
 func TestCheckForUpdate_APIFailure(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

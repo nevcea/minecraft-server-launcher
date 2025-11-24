@@ -98,14 +98,24 @@ func CheckForUpdate() (bool, *ReleaseResponse, error) {
 		return false, nil, fmt.Errorf("failed to parse release info: %w", err)
 	}
 
-	currentVersion := normalizeVersion(GetCurrentVersion())
+	currentVersion := GetCurrentVersion()
+	if currentVersion == "dev" {
+		return false, nil, nil
+	}
+	
+	currentVersion = normalizeVersion(currentVersion)
 	latestVersion := normalizeVersion(release.TagName)
 
-	if compareVersions(latestVersion, currentVersion) > 0 {
-		return true, &release, nil
+	if currentVersion == "" || latestVersion == "" {
+		return false, nil, nil
 	}
 
-	return false, nil, nil
+	comparison := compareVersions(latestVersion, currentVersion)
+	if comparison <= 0 {
+		return false, nil, nil
+	}
+
+	return true, &release, nil
 }
 
 func normalizeVersion(version string) string {
