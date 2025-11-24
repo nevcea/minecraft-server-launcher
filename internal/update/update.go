@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -136,61 +135,59 @@ func normalizeVersion(version string) string {
 
 func compareVersions(v1, v2 string) int {
 	var i1, i2 int
-	var num1, num2 int
-	var err1, err2 error
+	l1, l2 := len(v1), len(v2)
 
-	for i1 < len(v1) || i2 < len(v2) {
-		num1, i1, err1 = parseVersionPart(v1, i1)
-		num2, i2, err2 = parseVersionPart(v2, i2)
+	for i1 < l1 || i2 < l2 {
+		var n1, n2 int
+		var valid1, valid2 = true, true
 
-		if err1 != nil && err2 != nil {
-			return 0
+		if i1 < l1 {
+			for i1 < l1 {
+				c := v1[i1]
+				if c == '.' {
+					i1++
+					break
+				}
+				if c >= '0' && c <= '9' {
+					n1 = n1*10 + int(c-'0')
+				} else {
+					valid1 = false
+				}
+				i1++
+			}
 		}
-		if err1 != nil {
-			num1 = 0
-		}
-		if err2 != nil {
-			num2 = 0
+		if !valid1 {
+			n1 = 0
 		}
 
-		if num1 > num2 {
+		if i2 < l2 {
+			for i2 < l2 {
+				c := v2[i2]
+				if c == '.' {
+					i2++
+					break
+				}
+				if c >= '0' && c <= '9' {
+					n2 = n2*10 + int(c-'0')
+				} else {
+					valid2 = false
+				}
+				i2++
+			}
+		}
+		if !valid2 {
+			n2 = 0
+		}
+
+		if n1 > n2 {
 			return 1
 		}
-		if num1 < num2 {
+		if n1 < n2 {
 			return -1
 		}
 	}
 
 	return 0
-}
-
-func parseVersionPart(s string, start int) (int, int, error) {
-	if start >= len(s) {
-		return 0, len(s), fmt.Errorf("end of string")
-	}
-
-	end := start
-	for end < len(s) && s[end] != '.' {
-		if s[end] < '0' || s[end] > '9' {
-			return 0, end, fmt.Errorf("invalid character")
-		}
-		end++
-	}
-
-	if end == start {
-		return 0, end, fmt.Errorf("empty part")
-	}
-
-	num, err := strconv.Atoi(s[start:end])
-	if err != nil {
-		return 0, end, err
-	}
-
-	if end < len(s) {
-		end++
-	}
-
-	return num, end, nil
 }
 
 func getAssetForCurrentOS(release *ReleaseResponse) *Asset {
