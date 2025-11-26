@@ -16,7 +16,7 @@ const (
 func BenchmarkLoadChecksumFile_Old(b *testing.B) {
 	tmpDir := b.TempDir()
 	checksumPath := filepath.Join(tmpDir, checksumFileName)
-	
+
 	if err := os.WriteFile(checksumPath, []byte(validChecksum), 0644); err != nil {
 		b.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func BenchmarkLoadChecksumFile_Old(b *testing.B) {
 func BenchmarkLoadChecksumFile_Regex(b *testing.B) {
 	tmpDir := b.TempDir()
 	checksumPath := filepath.Join(tmpDir, checksumFileName)
-	
+
 	if err := os.WriteFile(checksumPath, []byte(validChecksum), 0644); err != nil {
 		b.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func BenchmarkLoadChecksumFile_Regex(b *testing.B) {
 func BenchmarkLoadChecksumFile_New(b *testing.B) {
 	tmpDir := b.TempDir()
 	checksumPath := filepath.Join(tmpDir, checksumFileName)
-	
+
 	if err := os.WriteFile(checksumPath, []byte(validChecksum), 0644); err != nil {
 		b.Fatal(err)
 	}
@@ -105,4 +105,3 @@ func createValidJarForBench(b *testing.B, path string) {
 		b.Fatal(err)
 	}
 }
-
