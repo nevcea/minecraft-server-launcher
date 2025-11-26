@@ -50,6 +50,9 @@ auto_ram_percentage: 50
 # 서버 실행 시 추가로 전달할 Java 인수 목록
 server_args:
   - nogui
+
+# 로그 파일 생성 여부
+log_file_enable: false
 `
 
 type Config struct {
@@ -66,6 +69,7 @@ type Config struct {
 	ServerArgs         []string `yaml:"server_args"`          // 서버 실행 인수
 	WorkDir            string   `yaml:"work_dir"`             // 작업 디렉토리
 	JavaPath           string   `yaml:"java_path"`            // Java 실행 파일 경로
+	LogFileEnable      bool     `yaml:"log_file_enable"`      // 로그 파일 생성 여부
 	LogFile            string   `yaml:"log_file"`             // 로그 파일 경로
 }
 

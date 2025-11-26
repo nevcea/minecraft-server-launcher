@@ -122,16 +122,18 @@ func main() {
 		logFilePath = cfg.LogFile
 	}
 
-	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err == nil {
-		log.SetOutput(logFile)
-		defer func() {
-			if err := logFile.Close(); err != nil {
-				fmt.Fprintf(os.Stderr, "[WARN] Failed to close log file: %v\n", err)
-			}
-		}()
-	} else {
-		fmt.Fprintf(os.Stderr, "[WARN] Failed to open log file: %v\n", err)
+	if cfg != nil && cfg.LogFileEnable {
+		logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err == nil {
+			log.SetOutput(logFile)
+			defer func() {
+				if err := logFile.Close(); err != nil {
+					fmt.Fprintf(os.Stderr, "[WARN] Failed to close log file: %v\n", err)
+				}
+			}()
+		} else {
+			fmt.Fprintf(os.Stderr, "[WARN] Failed to open log file: %v\n", err)
+		}
 	}
 
 	defer func() {

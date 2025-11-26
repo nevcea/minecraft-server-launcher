@@ -17,10 +17,10 @@ var (
 )
 
 const (
-	minJavaVersion     = 17
-	minJavaVersionZGC  = 11
-	minRAMForZGC       = 4
-	javaCmd            = "java"
+	minJavaVersion    = 17
+	minJavaVersionZGC = 11
+	minRAMForZGC      = 4
+	javaCmd           = "java"
 )
 
 var aikarFlags = []string{
@@ -64,7 +64,7 @@ func CheckJava(javaPath string) (string, int, error) {
 	cmd := exec.Command(javaPath, "-version")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", 0, fmt.Errorf("Java is not installed or not found at: %s", javaPath)
+		return "", 0, fmt.Errorf("java is not installed or not found at: %s", javaPath)
 	}
 
 	versionStr := extractJavaVersion(string(output))
@@ -78,7 +78,7 @@ func CheckJava(javaPath string) (string, int, error) {
 	}
 
 	if version < minJavaVersion {
-		return "", 0, fmt.Errorf("Java %d or higher is required, found Java %d", minJavaVersion, version)
+		return "", 0, fmt.Errorf("java %d or higher is required, found Java %d", minJavaVersion, version)
 	}
 
 	return versionStr, version, nil
@@ -263,12 +263,13 @@ func RunServer(jarFile string, minRAM, maxRAM int, useZGC bool, javaPath string,
 		return nil
 	case sig := <-sigChan:
 		fmt.Printf("\n[INFO] Received signal: %v, shutting down server...\n", sig)
+
 		if err := cmd.Process.Signal(sig); err != nil {
-			fmt.Fprintf(os.Stderr, "[WARN] Failed to send signal to process: %v\n", err)
-			if killErr := cmd.Process.Kill(); killErr != nil {
-				fmt.Fprintf(os.Stderr, "[WARN] Failed to kill process: %v\n", killErr)
+			if !strings.Contains(err.Error(), "not supported by windows") {
+				fmt.Fprintf(os.Stderr, "[WARN] Failed to send signal to process: %v\n", err)
 			}
 		}
+
 		<-done
 		return fmt.Errorf("server stopped by signal: %v", sig)
 	}
