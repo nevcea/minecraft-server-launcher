@@ -48,10 +48,9 @@ Edit `config.yaml`:
 
 ```yaml
 minecraft_version: "latest"
-auto_update: false              # Auto-update Minecraft server JAR
+auto_update: true               # Auto-update Minecraft server JAR
 auto_update_launcher: true      # Auto-update the launcher itself (enabled by default)
-auto_restart: false             # Automatically restart the server after crash/stop
-auto_backup: true
+auto_backup: false              # Automatically backup world data before server start
 backup_count: 10
 backup_worlds:
   - world
@@ -60,9 +59,10 @@ backup_worlds:
 min_ram: 2                      # Minimum RAM in GB
 max_ram: 0                      # Maximum RAM in GB (0 = auto-calculated)
 use_zgc: false                  # Use ZGC garbage collector
-auto_ram_percentage: 85         # Percentage of available RAM to use if max_ram is 0
+auto_ram_percentage: 50         # Percentage of available RAM to use if max_ram is 0
 java_path: ""                   # Custom path to Java executable
 work_dir: ""                    # Working directory
+log_file_enable: false          # Enable logging to file
 log_file: "launcher.log"        # Log file path
 server_args:
   - nogui
