@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	minJarSize = 22
-	zipMagicPK = 0x504B
+	minJarSize      = 22
+	checksumBufSize = 32 * 1024
 )
 
 var (

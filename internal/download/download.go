@@ -15,13 +15,13 @@ import (
 )
 
 const (
-	apiBase        = "https://api.papermc.io/v2/projects/paper"
-	timeout        = 30 * time.Second
+	apiBase         = "https://api.papermc.io/v2/projects/paper"
+	timeout         = 30 * time.Second
 	downloadBufSize = 128 * 1024
-	userAgent      = "minecraft-server-launcher/1.0"
-	maxRetries     = 3
-	retryDelay     = 2 * time.Second
-	retryBackoff   = 2.0
+	userAgent       = "minecraft-server-launcher/1.0"
+	maxRetries      = 3
+	retryDelay      = 2 * time.Second
+	retryBackoff    = 2.0
 )
 
 var defaultHTTPClient = &http.Client{
@@ -320,6 +320,13 @@ func downloadFile(client *http.Client, url, filename string) error {
 		)
 	} else {
 		bar = progressbar.DefaultBytes(-1, "Downloading")
+	}
+
+	if bar != nil {
+		defer func() {
+			_ = bar.Close()
+			fmt.Println()
+		}()
 	}
 
 	buf := make([]byte, downloadBufSize)

@@ -60,15 +60,24 @@ func shouldLog(level logLevelType) bool {
 }
 
 func promptYesNo(message string) bool {
-	fmt.Printf("[PROMPT] %s [Y/N]: ", message)
-	reader := bufio.NewReader(os.Stdin)
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		logMessage(logLevelWarn, "Failed to read user input: %v", err)
-		return false
+	for {
+		fmt.Printf("[PROMPT] %s [Y/N]: ", message)
+		reader := bufio.NewReader(os.Stdin)
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			logMessage(logLevelWarn, "Failed to read user input: %v", err)
+			return false
+		}
+
+		response = strings.TrimSpace(strings.ToLower(response))
+
+		if response == "y" || response == "yes" {
+			return true
+		}
+		if response == "n" || response == "no" {
+			return false
+		}
 	}
-	response = strings.TrimSpace(response)
-	return response == "Y" || response == "y"
 }
 
 func logMessage(level logLevelType, format string, args ...interface{}) {
@@ -188,7 +197,7 @@ func run(cfg *config.Config) error {
 				logMessage(logLevelError, "Failed to download update: %v", err)
 			} else {
 				logMessage(logLevelInfo, "Update downloaded successfully")
-				
+
 				if err := update.ValidateUpdate(tempFile); err != nil {
 					logMessage(logLevelError, "Update validation failed: %v", err)
 					if err := os.Remove(tempFile); err != nil {
@@ -320,11 +329,11 @@ func run(cfg *config.Config) error {
 			doUpdate := false
 			if cfg.AutoUpdate {
 				doUpdate = true
-		} else {
-			if promptYesNo("Do you want to update?") {
-				doUpdate = true
+			} else {
+				if promptYesNo("Do you want to update?") {
+					doUpdate = true
+				}
 			}
-		}
 
 			if doUpdate {
 				logMessage(logLevelInfo, "Updating server JAR...")
