@@ -22,14 +22,14 @@ A fast and reliable Minecraft Paper server launcher written in Go.
 
 ### Download from GitHub Releases
 
-1. Go to the [Releases](https://github.com/nevcea-sub/minecraft-server-launcher/releases) page
+1. Go to the Releases page for this repository
 2. Download the appropriate binary for your OS
 3. Run the executable
 
 ### Building from Source
 
 ```bash
-git clone https://github.com/nevcea-sub/minecraft-server-launcher.git
+git clone https://github.com/nevcea/minecraft-server-launcher.git
 cd minecraft-server-launcher
 go build -o paper-launcher .
 ```
@@ -64,6 +64,7 @@ java_path: ""                   # Custom path to Java executable
 work_dir: ""                    # Working directory
 log_file_enable: false          # Enable logging to file
 log_file: "launcher.log"        # Log file path
+github_token: ""                # GitHub token (required if the repo is private)
 server_args:
   - nogui
 ```
@@ -102,6 +103,7 @@ The launcher can automatically check for and install updates from GitHub Release
 - `LOG_FILE`: Override log file path
 - `MIN_RAM`: Override minimum RAM
 - `MAX_RAM`: Override maximum RAM
+- `LAUNCHER_GITHUB_TOKEN`: GitHub token for launcher update check/download (required for private repos)
 
 ## License
 

@@ -21,6 +21,11 @@ auto_update: true
 # 런처 자체의 자동 업데이트 기능 사용 여부
 auto_update_launcher: true
 
+# GitHub Releases 업데이트 체크/다운로드에 사용할 토큰
+# - 리포가 private이면 필수입니다 (토큰 없으면 GitHub API가 404를 반환합니다)
+# - 권장: 환경변수 LAUNCHER_GITHUB_TOKEN 로 주입 (파일에 토큰 저장은 주의)
+github_token: ""
+
 # 서버 시작 전 월드 데이터 자동 백업 여부
 auto_backup: false
 
@@ -63,6 +68,7 @@ type Config struct {
 	MinecraftVersion   string   `yaml:"minecraft_version"`    // 마인크래프트 버전
 	AutoUpdate         bool     `yaml:"auto_update"`          // 서버 자동 업데이트 여부
 	AutoUpdateLauncher bool     `yaml:"auto_update_launcher"` // 런처 자동 업데이트 여부
+	GitHubToken        string   `yaml:"github_token"`         // GitHub 토큰 (private repo 업데이트용)
 	AutoBackup         bool     `yaml:"auto_backup"`          // 자동 백업 사용 여부
 	BackupCount        int      `yaml:"backup_count"`         // 유지할 백업 개수
 	BackupDir          string   `yaml:"backup_dir"`           // 백업 디렉토리
@@ -124,6 +130,13 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("LOG_FILE"); v != "" {
 		cfg.LogFile = v
+	}
+	if v := os.Getenv("LAUNCHER_GITHUB_TOKEN"); v != "" {
+		cfg.GitHubToken = v
+	} else if v := os.Getenv("GITHUB_TOKEN"); v != "" {
+		cfg.GitHubToken = v
+	} else if v := os.Getenv("GH_TOKEN"); v != "" {
+		cfg.GitHubToken = v
 	}
 
 	if v := os.Getenv("MIN_RAM"); v != "" {

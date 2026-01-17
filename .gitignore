@@ -23,6 +23,7 @@ paper-launcher-*
 *.jar
 *.jar.sha256
 eula.txt
+config.yaml
 config.toml
 server.properties
 logs/

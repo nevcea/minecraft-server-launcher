@@ -122,6 +122,9 @@ func run(ctx context.Context, cfg *config.Config) error {
 		return fmt.Errorf("config is nil")
 	}
 
+	// Private repo 업데이트 체크/다운로드를 위해 토큰을 주입할 수 있음
+	update.SetGitHubToken(cfg.GitHubToken)
+
 	hasUpdate, release, err := update.CheckForUpdate(ctx)
 	if err != nil {
 		logger.Warn("Failed to check for launcher updates: %v", err)

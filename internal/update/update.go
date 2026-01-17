@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -18,6 +19,7 @@ import (
 var (
 	launcherVersion  = "dev"
 	githubUserAgent  = "minecraft-server-launcher-updater"
+	githubToken      string
 	cachedGitVersion string
 	gitVersionOnce   sync.Once
 )
@@ -27,6 +29,8 @@ var (
 )
 
 type Asset struct {
+	ID                 int64  `json:"id"`
+	URL                string `json:"url"`
 	Name               string `json:"name"`
 	BrowserDownloadURL string `json:"browser_download_url"`
 	Size               int64  `json:"size"`
@@ -38,6 +42,25 @@ type ReleaseResponse struct {
 	Body        string  `json:"body"`
 	PublishedAt string  `json:"published_at"`
 	Assets      []Asset `json:"assets"`
+}
+
+func SetGitHubToken(token string) {
+	githubToken = strings.TrimSpace(token)
+}
+
+func getGitHubToken() string {
+	if githubToken != "" {
+		return githubToken
+	}
+
+	// Allow env var override (useful for private repos / CI).
+	for _, key := range []string{"LAUNCHER_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"} {
+		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+			return v
+		}
+	}
+
+	return ""
 }
 
 func GetCurrentVersion() string {
@@ -72,8 +95,15 @@ func CheckForUpdate(ctx context.Context) (bool, *ReleaseResponse, error) {
 	if err != nil {
 		return false, nil, fmt.Errorf("failed to create request: %w", err)
 	}
+
+	token := getGitHubToken()
+
 	req.Header.Set("User-Agent", githubUserAgent)
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := utils.HTTPClient.Do(req)
 	if err != nil {
@@ -82,7 +112,18 @@ func CheckForUpdate(ctx context.Context) (bool, *ReleaseResponse, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return false, nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		bodyMsg := strings.TrimSpace(string(body))
+		if bodyMsg != "" {
+			bodyMsg = ": " + bodyMsg
+		}
+
+		// Private repos return 404 for unauthenticated requests.
+		if resp.StatusCode == http.StatusNotFound && token == "" {
+			return false, nil, fmt.Errorf("GitHub API returned status %d (repo may be private; set github_token in config.yaml or LAUNCHER_GITHUB_TOKEN env var)%s", resp.StatusCode, bodyMsg)
+		}
+
+		return false, nil, fmt.Errorf("GitHub API returned status %d%s", resp.StatusCode, bodyMsg)
 	}
 
 	var release ReleaseResponse
@@ -228,9 +269,16 @@ func DownloadUpdate(ctx context.Context, release *ReleaseResponse) (string, erro
 
 	tempFile := filepath.Join(exeDir, exeName+".new")
 
-	// Use shared DownloadFile utility
-	if err := utils.DownloadFile(ctx, asset.BrowserDownloadURL, tempFile); err != nil {
-		return "", fmt.Errorf("failed to download update: %w", err)
+	token := getGitHubToken()
+	if token != "" && asset.URL != "" {
+		if err := downloadGitHubReleaseAsset(ctx, asset.URL, token, tempFile); err != nil {
+			return "", fmt.Errorf("failed to download update: %w", err)
+		}
+	} else {
+		// Use shared DownloadFile utility (public repos)
+		if err := utils.DownloadFile(ctx, asset.BrowserDownloadURL, tempFile); err != nil {
+			return "", fmt.Errorf("failed to download update: %w", err)
+		}
 	}
 
 	if runtime.GOOS != "windows" {
@@ -240,6 +288,72 @@ func DownloadUpdate(ctx context.Context, release *ReleaseResponse) (string, erro
 	}
 
 	return tempFile, nil
+}
+
+func downloadGitHubReleaseAsset(ctx context.Context, assetAPIURL, token, filename string) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", assetAPIURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("User-Agent", githubUserAgent)
+	req.Header.Set("Accept", "application/octet-stream")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := utils.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		bodyMsg := strings.TrimSpace(string(body))
+		if bodyMsg != "" {
+			bodyMsg = ": " + bodyMsg
+		}
+		return fmt.Errorf("download failed with status %d%s", resp.StatusCode, bodyMsg)
+	}
+
+	tempFile := filename + ".part"
+	if _, err := os.Stat(tempFile); err == nil {
+		_ = os.Remove(tempFile)
+	}
+
+	out, err := os.Create(tempFile)
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+
+	closed := false
+	defer func() {
+		if !closed {
+			_ = out.Close()
+			_ = os.Remove(tempFile)
+		}
+	}()
+
+	if _, err := io.Copy(out, resp.Body); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("failed to close file: %w", err)
+	}
+	closed = true
+
+	// Windows에서 Rename이 실패할 수 있어 기존 파일은 제거
+	if _, err := os.Stat(filename); err == nil {
+		if err := os.Remove(filename); err != nil {
+			return fmt.Errorf("failed to remove existing file: %w", err)
+		}
+	}
+
+	if err := os.Rename(tempFile, filename); err != nil {
+		return fmt.Errorf("failed to rename temp file: %w", err)
+	}
+
+	return nil
 }
 
 func InstallUpdate(tempFile string) error {
