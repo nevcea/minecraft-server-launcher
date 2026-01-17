@@ -30,9 +30,9 @@ var (
 )
 
 func promptYesNo(message string) bool {
+	reader := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Printf("[PROMPT] %s [Y/N]: ", message)
-		reader := bufio.NewReader(os.Stdin)
 		response, err := reader.ReadString('\n')
 		if err != nil {
 			logger.Warn("Failed to read user input: %v", err)

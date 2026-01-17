@@ -3,6 +3,7 @@ package utils
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -68,21 +69,7 @@ func TestHandleEULA(t *testing.T) {
 	}
 
 	content := string(data)
-	if !contains(content, "eula=true") {
+	if !strings.Contains(content, "eula=true") {
 		t.Error("eula.txt should contain eula=true")
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) &&
-		(s == substr || len(s) > len(substr) && anySubstring(s, substr))
-}
-
-func anySubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

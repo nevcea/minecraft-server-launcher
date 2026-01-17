@@ -99,14 +99,6 @@ func DownloadJar(ctx context.Context, version string) (string, error) {
 		}
 	}
 
-	tempFile := jarName + ".part"
-	if _, err := os.Stat(tempFile); err == nil {
-		logger.Info("Found incomplete download, removing...")
-		if err := os.Remove(tempFile); err != nil {
-			logger.Warn("Failed to remove incomplete download: %v", err)
-		}
-	}
-
 	url := fmt.Sprintf("%s/versions/%s/builds/%d/downloads/%s", apiBase, version, build, jarName)
 	logger.Info("Downloading %s...", jarName)
 

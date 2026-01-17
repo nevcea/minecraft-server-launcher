@@ -91,7 +91,10 @@ func DownloadFile(ctx context.Context, url, filename string) error {
 
 	tempFile := filename + ".part"
 	if _, err := os.Stat(tempFile); err == nil {
-		os.Remove(tempFile)
+		logger.Info("Found incomplete download, removing: %s", tempFile)
+		if err := os.Remove(tempFile); err != nil {
+			logger.Warn("Failed to remove incomplete download: %v", err)
+		}
 	}
 
 	out, err := os.Create(tempFile)
@@ -102,8 +105,12 @@ func DownloadFile(ctx context.Context, url, filename string) error {
 	closed := false
 	defer func() {
 		if !closed {
-			out.Close()
-			os.Remove(tempFile)
+			if err := out.Close(); err != nil {
+				logger.Warn("Failed to close temp file: %v", err)
+			}
+			if err := os.Remove(tempFile); err != nil && !os.IsNotExist(err) {
+				logger.Warn("Failed to remove temp file: %v", err)
+			}
 		}
 	}()
 

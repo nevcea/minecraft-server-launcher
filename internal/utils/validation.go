@@ -23,50 +23,31 @@ var (
 	hexChecksumRegex = regexp.MustCompile(`^[0-9a-fA-F]{64}$`)
 )
 
-func validateJarStructure(jarPath string) (*zip.Reader, error) {
-	info, err := os.Stat(jarPath)
-	if err != nil {
-		return nil, fmt.Errorf("JAR file does not exist: %s", jarPath)
+func validateJarStructureFromFile(jarPath string, file *os.File, size int64) error {
+	if size == 0 {
+		return fmt.Errorf("JAR file is empty: %s", jarPath)
 	}
 
-	if info.Size() == 0 {
-		return nil, fmt.Errorf("JAR file is empty: %s", jarPath)
+	if size < minJarSize {
+		return fmt.Errorf("JAR file is too small (%d bytes): %s", size, jarPath)
 	}
-
-	if info.Size() < minJarSize {
-		return nil, fmt.Errorf("JAR file is too small (%d bytes): %s", info.Size(), jarPath)
-	}
-
-	file, err := os.Open(jarPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open JAR: %w", err)
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			_ = err
-		}
-	}()
 
 	magic := make([]byte, 2)
-	if _, err := io.ReadFull(file, magic); err != nil {
-		return nil, fmt.Errorf("failed to read magic number: %w", err)
+	if _, err := file.ReadAt(magic, 0); err != nil {
+		return fmt.Errorf("failed to read magic number: %w", err)
 	}
 
-	expectedMagic := []byte{0x50, 0x4B}
-	if magic[0] != expectedMagic[0] || magic[1] != expectedMagic[1] {
-		return nil, fmt.Errorf("invalid JAR file: missing ZIP magic number (expected PK, found %02X%02X)", magic[0], magic[1])
+	if magic[0] != 0x50 || magic[1] != 0x4B {
+		return fmt.Errorf("invalid JAR file: missing ZIP magic number (expected PK, found %02X%02X)", magic[0], magic[1])
 	}
 
-	if _, err := file.Seek(0, 0); err != nil {
-		return nil, fmt.Errorf("failed to seek file: %w", err)
-	}
-	reader, err := zip.NewReader(file, info.Size())
+	reader, err := zip.NewReader(file, size)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse JAR as ZIP: %w", err)
+		return fmt.Errorf("failed to parse JAR as ZIP: %w", err)
 	}
 
 	if len(reader.File) == 0 {
-		return nil, fmt.Errorf("JAR file contains no entries")
+		return fmt.Errorf("JAR file contains no entries")
 	}
 
 	hasManifest := false
@@ -81,28 +62,55 @@ func validateJarStructure(jarPath string) (*zip.Reader, error) {
 		logger.Warn("JAR file missing META-INF/MANIFEST.MF: %s", jarPath)
 	}
 
-	return reader, nil
+	return nil
 }
 
-func ValidateJarFile(jarPath string) error {
-	_, err := validateJarStructure(jarPath)
-	return err
-}
+func validateJarStructure(jarPath string) error {
+	info, err := os.Stat(jarPath)
+	if err != nil {
+		return fmt.Errorf("failed to stat JAR file %q: %w", jarPath, err)
+	}
 
-func ValidateJarAndCalculateChecksum(jarPath string) (string, error) {
-	if _, err := validateJarStructure(jarPath); err != nil {
-		return "", err
+	if info.IsDir() {
+		return fmt.Errorf("JAR path is a directory: %s", jarPath)
 	}
 
 	file, err := os.Open(jarPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to open JAR for checksum: %w", err)
+		return fmt.Errorf("failed to open JAR: %w", err)
 	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			_ = err
-		}
-	}()
+	defer file.Close()
+
+	return validateJarStructureFromFile(jarPath, file, info.Size())
+}
+
+func ValidateJarFile(jarPath string) error {
+	return validateJarStructure(jarPath)
+}
+
+func ValidateJarAndCalculateChecksum(jarPath string) (string, error) {
+	info, err := os.Stat(jarPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to stat JAR file %q: %w", jarPath, err)
+	}
+
+	if info.IsDir() {
+		return "", fmt.Errorf("JAR path is a directory: %s", jarPath)
+	}
+
+	file, err := os.Open(jarPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open JAR: %w", err)
+	}
+	defer file.Close()
+
+	if err := validateJarStructureFromFile(jarPath, file, info.Size()); err != nil {
+		return "", err
+	}
+
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return "", fmt.Errorf("failed to seek file: %w", err)
+	}
 
 	h := sha256.New()
 	buf := make([]byte, checksumBufSize)
@@ -148,11 +156,8 @@ func LoadChecksumFile(path string) (string, error) {
 		return "", fmt.Errorf("invalid checksum format: expected %d characters, got %d", expectedChecksumLength, len(data))
 	}
 
-	for i := 0; i < len(data); i++ {
-		c := data[i]
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-			return "", fmt.Errorf("invalid checksum format: contains non-hexadecimal characters")
-		}
+	if !hexChecksumRegex.Match(data) {
+		return "", fmt.Errorf("invalid checksum format: contains non-hexadecimal characters")
 	}
 
 	return string(data), nil
