@@ -23,7 +23,7 @@ var (
 )
 
 var (
-	githubAPIBase = "https://api.github.com/repos/nevcea-sub/minecraft-server-launcher/releases/latest"
+	githubAPIBase = "https://api.github.com/repos/nevcea/minecraft-server-launcher/releases/latest"
 )
 
 type Asset struct {
