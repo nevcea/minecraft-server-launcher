@@ -1,0 +1,27 @@
+linters:
+  enable:
+    - gofmt
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - misspell
+
+linters-settings:
+  gofmt:
+    simplify: true
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+run:
+  timeout: 5m
+  tests: true
+

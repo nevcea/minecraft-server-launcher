@@ -1,0 +1,39 @@
+# Binaries
+paper-launcher
+paper-launcher.exe
+paper-launcher-*
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Minecraft
+*.jar
+*.jar.sha256
+eula.txt
+config.yaml
+config.toml
+server.properties
+logs/
+world/
+world_nether/
+world_the_end/
+plugins/
+cache/
+versions/
+
+# Old Rust project (keep for reference)
+/target/
+/Cargo.lock
